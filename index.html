@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bảng Điều Hành Số - Quản Lý Công Việc (Firebase)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
+        .chart-container { position: relative; width: 100%; max-width: 600px; margin: auto; height: 320px; }
+        .table-responsive { display: block; width: 100%; overflow-x: auto; }
+        .kpi-card { transition: transform 0.2s, box-shadow 0.2s; }
+        .kpi-card:hover { transform: translateY(-5px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        #tasksTableBody tr { cursor: pointer; }
+        .section-card { background-color: white; border-radius: 0.75rem; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); border: 1px solid #e2e8f0; }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <div id="authContainer" class="flex items-center justify-center min-h-screen bg-slate-100">
+        <div class="p-8 bg-white rounded-xl shadow-lg max-w-md w-full">
+            <svg class="h-20 w-auto mx-auto mb-4 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25 3h4.5M15 3.75l3 3m0 0l-3 3m3-3H9" />
+            </svg>
+
+            <h1 class="text-2xl font-bold text-slate-800 mb-2 text-center">Bảng Điều Hành Số</h1>
+            <p id="form-title" class="text-slate-500 mb-6 text-center">Đăng nhập để tiếp tục</p>
+
+            <form id="loginForm">
+                <input type="text" id="nameInput" class="w-full px-4 py-2 border rounded-lg mb-3 hidden" placeholder="Họ và Tên" required>
+                <input type="email" id="emailInput" class="w-full px-4 py-2 border rounded-lg mb-3" placeholder="Email" required>
+                <input type="password" id="passwordInput" class="w-full px-4 py-2 border rounded-lg" placeholder="Mật khẩu" required>
+                <button type="submit" class="w-full mt-4 px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">Đăng nhập</button>
+            </form>
+            
+            <p id="authError" class="text-red-600 bg-red-50 p-3 rounded-md mt-4 text-sm" style="display: none;"></p>
+            
+            <div id="networkError" class="text-red-600 bg-red-50 p-3 rounded-md mt-4 text-sm" style="display: none;">
+                <p class="font-bold">Lỗi kết nối!</p>
+                <p>Không thể tải các tài nguyên cần thiết. Vui lòng kiểm tra lại kết nối mạng và thử tải lại trang.</p>
+            </div>
+            
+            <!-- NEW: Connection Success Message -->
+            <div id="connectionSuccess" class="text-green-700 bg-green-100 p-3 rounded-md mt-4 text-sm text-center" style="display: none;">
+                <p class="font-semibold">Đã kết nối thành công với máy chủ!</p>
+            </div>
+            
+            <p class="text-center text-sm mt-4">
+                <a href="#" id="toggleForm" class="text-indigo-600 hover:underline">Chưa có tài khoản? Đăng ký</a>
+            </p>
+
+            <div id="loginStatusContainer" class="mt-6 text-center hidden">
+                <div class="flex items-center justify-center">
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <p id="loginStatusText" class="text-slate-600 font-medium"></p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div id="dashboardContainer" class="container mx-auto p-4 md:p-6 lg:p-8 hidden">
+        <header class="text-center mb-8 relative">
+            <div class="absolute top-0 left-0">
+                 <svg class="h-16 w-auto text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25 3h4.5M15 3.75l3 3m0 0l-3 3m3-3H9" />
+                </svg>
+            </div>
+            <div id="userProfile" class="absolute top-2 right-2 flex items-center space-x-3 bg-white p-2 rounded-lg shadow-sm">
+                <div>
+                    <p id="userName" class="text-sm font-semibold text-slate-800"></p>
+                </div>
+                <button id="logoutButton" class="ml-4 px-3 py-1.5 text-xs font-medium text-white bg-rose-500 rounded-md hover:bg-rose-600 transition-colors">Đăng xuất</button>
+            </div>
+            <h1 class="text-3xl md:text-4xl font-bold text-slate-900">BẢNG ĐIỀU HÀNH SỐ</h1>
+            <p class="text-slate-500 mt-2">Phục vụ Quản lý và Theo dõi tiến độ công việc</p>
+        </header>
+
+        <main id="mainContent">
+            <section class="mb-6 section-card">
+                 <div class="flex flex-wrap justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold text-slate-700">Bộ lọc và Tìm kiếm</h2>
+                    <div class="flex items-center space-x-2">
+                        <button id="downloadTemplateButton" class="px-4 py-2 text-sm bg-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-300 transition-colors">Tải file mẫu</button>
+                        <input type="file" id="importExcelInput" class="hidden" accept=".xlsx, .xls">
+                        <button id="importExcelButton" class="px-4 py-2 text-sm bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition-colors">Nhập từ Excel</button>
+                        <button id="addTaskButton" class="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">+ Thêm Công Việc Mới</button>
+                    </div>
+                </div>
+                <div id="filters" class="space-y-4"></div>
+            </section>
+            
+            <section id="kpis" class="mb-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"></section>
+            <section id="charts" class="mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"></section>
+            
+            <section id="data-table" class="section-card">
+                 <h2 class="text-xl font-semibold mb-4 text-slate-700">Danh sách Công việc chi tiết</h2>
+                 <p class="text-sm text-slate-500 mb-4">Mẹo: Nhấn vào một hàng để chỉnh sửa công việc.</p>
+                 <div class="table-responsive"><table class="w-full text-sm text-left text-slate-600"><thead class="text-xs text-slate-700 uppercase bg-slate-50"><tr id="tasksTableHeader"></tr></thead><tbody id="tasksTableBody"></tbody></table></div>
+                 <div id="no-results" class="text-center py-8 text-slate-500 hidden"><p>Không có công việc nào.</p></div>
+                 <div id="paginationControls" class="flex justify-between items-center mt-4 pt-4 border-t border-slate-200"></div>
+                 <div id="loadMoreContainer" class="text-center mt-4 hidden">
+                    <button id="loadMoreButton" class="px-6 py-2 bg-indigo-100 text-indigo-700 font-semibold rounded-lg hover:bg-indigo-200 transition-colors">Tải thêm công việc</button>
+                 </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="taskModal" class="fixed inset-0 z-50 flex items-center justify-center hidden bg-black bg-opacity-50">
+        <div class="bg-white rounded-lg shadow-2xl p-6 w-full max-w-2xl relative max-h-screen overflow-y-auto">
+            <h2 id="modalTitle" class="text-2xl font-bold text-slate-800 mb-4"></h2>
+            <form id="taskForm">
+                <input type="hidden" id="taskId">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    </div>
+                <div class="mt-6 flex justify-between items-center">
+                    <button type="button" id="deleteTaskButton" class="px-4 py-2 bg-rose-600 text-white font-semibold rounded-lg shadow-md hover:bg-rose-700 hidden transition-colors">Xóa Công Việc</button>
+                    <div class="flex space-x-3">
+                        <button type="button" onclick="closeTaskModal()" class="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors">Hủy</button>
+                        <button type="submit" class="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">Lưu</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div id="welcomeModal" class="fixed inset-0 z-[60] flex items-center justify-center hidden bg-black bg-opacity-60">
+        <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-lg text-center transform transition-all scale-95 opacity-0" id="welcomeModalContent">
+            <h2 id="welcomeMessage" class="text-2xl font-bold text-slate-800 mb-4"></h2>
+            <p class="text-slate-600 mb-6">Tác Giả: Lê Quang Huy – Tổ QLDN 1 – TCS5 TP Hà Nội</p>
+            <button onclick="closeWelcomeModal()" class="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">Đóng</button>
+        </div>
+    </div>
+
+    <script>
+    function handleScriptLoadError() {
+        document.getElementById('loginForm').style.display = 'none';
+        document.getElementById('toggleForm').parentElement.style.display = 'none';
+        document.getElementById('loginStatusContainer').style.display = 'none';
+        document.getElementById('networkError').style.display = 'block';
+    }
+
+    if (typeof firebase === 'undefined') {
+        handleScriptLoadError();
+    } else {
+        // --- UPDATED: Show connection success message ---
+        const connectionSuccessEl = document.getElementById('connectionSuccess');
+        connectionSuccessEl.style.display = 'block';
+        setTimeout(() => {
+            connectionSuccessEl.style.display = 'none';
+        }, 4000); // Hide after 4 seconds
+
+        const firebaseConfig = {
+          apiKey: "AIzaSyDxteIBXiT92KbGy_5M0HKnkflgCiGn1-c",
+          authDomain: "qldn1-d0895.firebaseapp.com",
+          projectId: "qldn1-d0895",
+          storageBucket: "qldn1-d0895.appspot.com",
+          messagingSenderId: "624100323347",
+          appId: "1:624100323347:web:9eb65780fee0887755cfe6",
+          measurementId: "G-LETT8XEEJG"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        let tasksData = [];
+        let filteredTasks = [];
+        let currentPage = 1;
+        let currentUserProfile = null;
+        let lastVisibleTask = null; 
+        const CLIENT_SIDE_ROWS_PER_PAGE = 20; 
+        const SERVER_SIDE_PAGE_SIZE = 50; 
+        
+        const TASK_FIELDS = ['Loại công việc', 'MST/NỘI DUNG', 'nguoiPhuTrach', 'Ngày giao', 'Hạn xử lý', 'Trạng thái', 'Ghi chú'];
+        let statusChart, workloadChart, taskTypeStatusChart;
+
+        const PREDEFINED_LISTS = {
+            'Trạng thái': ['Đang Thực Hiện', 'Đã Hoàn Thành', 'Chưa hoàn thành', 'Tạm hoãn', 'Đã hủy'],
+            'Loại công việc': [ 'Giải thể','Chuyển quận','Hoàn thuế GTGT', 'Quản lý nợ', 'Kiểm tra tại CQT', 'Hoàn thuế TNCN', 'Rủi ro Hóa đơn', 'Quản lý đối tượng'],
+            'nguoiPhuTrach': [] 
+        };
+
+        const authContainer = document.getElementById('authContainer');
+        const dashboardContainer = document.getElementById('dashboardContainer');
+        const loginForm = document.getElementById('loginForm');
+        const toggleForm = document.getElementById('toggleForm');
+        const formTitle = document.getElementById('form-title');
+        const nameInput = document.getElementById('nameInput');
+        const loginStatusContainer = document.getElementById('loginStatusContainer');
+        const loginStatusText = document.getElementById('loginStatusText');
+        const authErrorEl = document.getElementById('authError');
+        const loadMoreButton = document.getElementById('loadMoreButton');
+        const loadMoreContainer = document.getElementById('loadMoreContainer');
+
+        let isLogin = true;
+
+        function updateLoginStatus(message, isError = false) {
+            authErrorEl.style.display = 'none';
+            if (message) {
+                if (isError) {
+                    authErrorEl.textContent = message;
+                    authErrorEl.style.display = 'block';
+                    loginStatusContainer.classList.add('hidden');
+                    loginForm.style.display = 'block';
+                    toggleForm.parentElement.style.display = 'block';
+                } else {
+                    loginStatusText.textContent = message + '...';
+                    loginStatusContainer.classList.remove('hidden');
+                    loginForm.style.display = 'none';
+                    toggleForm.parentElement.style.display = 'none';
+                }
+            } else {
+                loginStatusContainer.classList.add('hidden');
+                loginForm.style.display = 'block';
+                toggleForm.parentElement.style.display = 'block';
+            }
+        }
+
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                await loadInitialData(user);
+            } else {
+                currentUserProfile = null;
+                tasksData = [];
+                filteredTasks = [];
+                lastVisibleTask = null;
+                authContainer.classList.remove('hidden');
+                dashboardContainer.classList.add('hidden');
+                updateLoginStatus(''); 
+                sessionStorage.removeItem('welcomeShown');
+            }
+        });
+
+        async function loadInitialData(user) {
+            try {
+                updateLoginStatus('Đang xác thực tài khoản');
+                const userDoc = await db.collection("users").doc(user.uid).get();
+
+                if (!userDoc.exists) {
+                    throw new Error('Không tìm thấy thông tin hồ sơ người dùng.');
+                }
+
+                currentUserProfile = userDoc.data();
+                if (currentUserProfile.role === 'pending') {
+                    throw new Error('Tài khoản của bạn đang chờ quản trị viên phê duyệt.');
+                }
+
+                document.getElementById('userName').textContent = currentUserProfile.name;
+                
+                updateLoginStatus('Đang tải danh sách người dùng');
+                const usersSnapshot = await db.collection("users").get();
+                PREDEFINED_LISTS.nguoiPhuTrach = usersSnapshot.docs.map(doc => doc.data().name).filter(Boolean).sort();
+                
+                updateLoginStatus('Đang tải dữ liệu công việc');
+                await initializeApp();
+
+                authContainer.classList.add('hidden');
+                dashboardContainer.classList.remove('hidden');
+
+                if (!sessionStorage.getItem('welcomeShown')) {
+                    document.getElementById('welcomeMessage').innerHTML = `Chào mừng <span class="text-indigo-600">${currentUserProfile.name}</span> đến với Ứng dụng Quản lý – Theo dõi công việc`;
+                    const modal = document.getElementById('welcomeModal');
+                    const modalContent = document.getElementById('welcomeModalContent');
+                    modal.classList.remove('hidden');
+                    setTimeout(() => { modalContent.classList.remove('scale-95', 'opacity-0'); }, 50);
+                    sessionStorage.setItem('welcomeShown', 'true');
+                }
+
+            } catch (error) {
+                console.error("Lỗi khi tải dữ liệu ban đầu: ", error);
+                updateLoginStatus(`Lỗi: ${error.message}. Vui lòng thử lại.`, true);
+                auth.signOut();
+            }
+        }
+
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const email = document.getElementById('emailInput').value;
+            const password = document.getElementById('passwordInput').value;
+            
+            if (isLogin) {
+                updateLoginStatus('Đang đăng nhập');
+                auth.signInWithEmailAndPassword(email, password).catch(error => {
+                    updateLoginStatus("Sai email hoặc mật khẩu.", true);
+                });
+            } else {
+                const name = nameInput.value;
+                if (!name) { 
+                    updateLoginStatus("Vui lòng nhập họ và tên.", true);
+                    return; 
+                }
+                updateLoginStatus('Đang tạo tài khoản');
+                auth.createUserWithEmailAndPassword(email, password)
+                    .then(userCredential => {
+                        return db.collection("users").doc(userCredential.user.uid).set({
+                            name: name, email: email, role: 'pending' 
+                        });
+                    })
+                    .then(() => {
+                        alert("Đăng ký thành công! Tài khoản của bạn đang chờ quản trị viên phê duyệt.");
+                        auth.signOut();
+                    })
+                    .catch(error => {
+                        const message = error.code === 'auth/email-already-in-use' ? "Email này đã được sử dụng." : "Đã có lỗi xảy ra.";
+                        updateLoginStatus(message, true);
+                    });
+            }
+        });
+
+        toggleForm.addEventListener('click', (e) => {
+            e.preventDefault();
+            isLogin = !isLogin;
+            nameInput.classList.toggle('hidden', isLogin);
+            formTitle.textContent = isLogin ? 'Đăng nhập' : 'Tạo tài khoản mới';
+            loginForm.querySelector('button').textContent = isLogin ? 'Đăng nhập' : 'Đăng ký';
+            toggleForm.textContent = isLogin ? 'Chưa có tài khoản? Đăng ký' : 'Đã có tài khoản? Đăng nhập';
+            authErrorEl.style.display = 'none';
+        });
+
+        document.getElementById('logoutButton').addEventListener('click', () => auth.signOut());
+
+        function initializeApp() {
+            document.getElementById('addTaskButton').onclick = () => openTaskModal();
+            document.getElementById('taskForm').onsubmit = saveTask;
+            document.getElementById('downloadTemplateButton').onclick = downloadTemplate;
+            document.getElementById('importExcelButton').onclick = () => document.getElementById('importExcelInput').click();
+            document.getElementById('importExcelInput').onchange = importFromExcel;
+            loadMoreButton.onclick = fetchMoreTasks;
+
+            tasksData = [];
+            lastVisibleTask = null;
+
+            renderTableHeader();
+            populateFilters();
+            
+            return fetchMoreTasks(true);
+        }
+
+        function fetchMoreTasks(isInitial = false) {
+            let tasksQuery = db.collection("tasks");
+
+            if (currentUserProfile && currentUserProfile.role === 'member') {
+                tasksQuery = tasksQuery.where("nguoiPhuTrach", "==", currentUserProfile.name);
+            }
+
+            tasksQuery = tasksQuery.orderBy("createdAt", "desc");
+
+            if (lastVisibleTask && !isInitial) {
+                tasksQuery = tasksQuery.startAfter(lastVisibleTask);
+            }
+            
+            tasksQuery = tasksQuery.limit(SERVER_SIDE_PAGE_SIZE);
+
+            loadMoreButton.disabled = true;
+            loadMoreButton.textContent = 'Đang tải...';
+
+            return tasksQuery.get().then(snapshot => {
+                const newTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                tasksData = isInitial ? newTasks : tasksData.concat(newTasks);
+                
+                lastVisibleTask = snapshot.docs[snapshot.docs.length - 1];
+
+                loadMoreContainer.classList.toggle('hidden', newTasks.length < SERVER_SIDE_PAGE_SIZE);
+
+                applyFilters();
+
+                loadMoreButton.disabled = false;
+                loadMoreButton.textContent = 'Tải thêm công việc';
+            }).catch(error => {
+                console.error("Error fetching tasks: ", error);
+                loadMoreButton.textContent = 'Lỗi! Thử lại';
+                loadMoreButton.disabled = false;
+            });
+        }
+        
+        async function saveTask(e) {
+            e.preventDefault();
+            const taskId = document.getElementById('taskId').value;
+            const taskData = {};
+            const dateRegex = /^\d{2}\/\d{2}\/\d{4}$/;
+            for (const field of TASK_FIELDS) {
+                const input = document.getElementById(`field-${field}`);
+                const displayName = field === 'nguoiPhuTrach' ? 'Người phụ trách' : field;
+                const isDate = displayName.includes('Ngày') || displayName.includes('Hạn');
+                if (isDate && input.value && !dateRegex.test(input.value)) {
+                    alert(`Định dạng ngày cho trường "${displayName}" không hợp lệ. Vui lòng nhập theo dạng dd/mm/yyyy.`);
+                    return;
+                }
+                taskData[field] = input.value;
+            }
+            taskData.lastModified = new Date();
+            taskData.modifiedBy = auth.currentUser.email;
+            try {
+                if (taskId) {
+                    await db.collection("tasks").doc(taskId).set(taskData, { merge: true });
+                } else {
+                    taskData.createdBy = auth.currentUser.email;
+                    taskData.createdAt = new Date();
+                    await db.collection("tasks").add(taskData);
+                }
+                location.reload(); 
+                closeTaskModal();
+            } catch (error) {
+                console.error("Error saving task: ", error);
+                alert("Lưu công việc thất bại.");
+            }
+        }
+        
+        async function deleteTask() {
+            if (!confirm('Bạn có chắc chắn muốn xóa công việc này không?')) return;
+            const taskId = document.getElementById('taskId').value;
+            if (!taskId) return;
+            try {
+                await db.collection("tasks").doc(taskId).delete();
+                location.reload(); 
+                closeTaskModal();
+            } catch (error) {
+                console.error("Error deleting task: ", error);
+                alert("Xóa công việc thất bại.");
+            }
+        }
+
+        function populateFilters() {
+            const filtersContainer = document.getElementById('filters');
+            filtersContainer.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"><div><label class="block text-sm font-medium text-slate-600 mb-1">Loại công việc</label><select id="taskTypeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Người phụ trách</label><select id="assigneeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Trạng thái</label><select id="statusFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Đã Hoàn Thành">Đã Hoàn Thành</option><option value="Đang Thực Hiện">Đang Thực Hiện</option></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Cảnh Báo</label><select id="warningFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Quá Hạn">Quá Hạn</option><option value="Sắp đến hạn">Sắp đến hạn</option><option value="Không có">Không có</option></select></div></div><div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div><label for="fromDateFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Từ ngày)</label><input type="text" id="fromDateFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg"></div><div><label for="toDateFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Đến ngày)</label><input type="text" id="toDateFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg"></div><div class="md:col-span-2"><label class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm (MST/Nội dung)</label><input type="text" id="searchFilter" placeholder="Nhập từ khóa..." class="w-full p-2 border rounded-lg"></div></div>`;
+            const populateSelect = (id, key) => {
+                const select = document.getElementById(id);
+                const values = PREDEFINED_LISTS[key] && PREDEFINED_LISTS[key].length > 0 ? PREDEFINED_LISTS[key] : [...new Set(tasksData.map(t => t[key]))].filter(Boolean).sort();
+                select.innerHTML = '<option value="all">Tất cả</option>';
+                values.forEach(val => select.innerHTML += `<option value="${val}">${val}</option>`);
+            };
+            populateSelect('taskTypeFilter', 'Loại công việc');
+            populateSelect('assigneeFilter', 'nguoiPhuTrach');
+            filtersContainer.querySelectorAll('select, input').forEach(el => el.addEventListener('input', applyFilters));
+            document.getElementById('fromDateFilter').addEventListener('input', formatDateInput);
+            document.getElementById('toDateFilter').addEventListener('input', formatDateInput);
+        }
+        
+        function renderTableHeader() { document.getElementById('tasksTableHeader').innerHTML = TASK_FIELDS.map(h => `<th class="px-4 py-3">${h==='nguoiPhuTrach'?'Người phụ trách':h}</th>`).join('') + '<th class="px-4 py-3">Cảnh Báo</th>'; }
+        
+        function renderTable(data) {
+            const tableBody = document.getElementById('tasksTableBody');
+            const paginatedData = data.slice((currentPage - 1) * CLIENT_SIDE_ROWS_PER_PAGE, currentPage * CLIENT_SIDE_ROWS_PER_PAGE);
+            
+            if(currentPage === 1) tableBody.innerHTML = '';
+
+            document.getElementById('no-results').classList.toggle('hidden', filteredTasks.length > 0);
+
+            paginatedData.forEach(task => {
+                const warningInfo = getWarningStatus(task);
+                const row = document.createElement('tr');
+                row.className = `border-b border-slate-200 hover:bg-slate-50 ${warningInfo.bgColor||'bg-white'}`;
+                row.onclick = () => openTaskModal(task);
+                let cells = TASK_FIELDS.map(field => `<td class="px-4 py-2">${task[field]||''}</td>`).join('');
+                cells += `<td class="px-4 py-2">${warningInfo.label?`<span class="px-2 py-1 text-xs font-semibold rounded-full ${warningInfo.colorClass}">${warningInfo.label}</span>`:''}</td>`;
+                row.innerHTML = cells;
+                tableBody.appendChild(row);
+            });
+        }
+
+        function applyFilters() {
+            const type = document.getElementById('taskTypeFilter').value;
+            const assignee = document.getElementById('assigneeFilter').value;
+            const coreStatus = document.getElementById('statusFilter').value;
+            const warningStatus = document.getElementById('warningFilter').value;
+            const searchTerm = document.getElementById('searchFilter').value.toLowerCase();
+            const fromDateStr = document.getElementById('fromDateFilter').value;
+            const toDateStr = document.getElementById('toDateFilter').value;
+            const parseDate = (str) => { if (!str || str.length !== 10) return null; const parts = str.split('/'); return new Date(parts[2], parts[1] - 1, parts[0]); };
+            const fromDate = parseDate(fromDateStr);
+            const toDate = parseDate(toDateStr);
+            
+            filteredTasks = tasksData.filter(task => {
+                const warningInfo = getWarningStatus(task);
+                const typeMatch = type === 'all' || task['Loại công việc'] === type;
+                const assigneeMatch = assignee === 'all' || task['nguoiPhuTrach'] === assignee;
+                const searchMatch = (task['MST/NỘI DUNG'] || '').toLowerCase().includes(searchTerm);
+                const coreStatusMatch = (coreStatus === 'all') || (coreStatus === 'Đã Hoàn Thành' && task['Trạng thái'] === 'Đã Hoàn Thành') || (coreStatus === 'Đang Thực Hiện' && task['Trạng thái'] !== 'Đã Hoàn Thành');
+                const warningMatch = (warningStatus === 'all') || (warningStatus === 'Không có' && !warningInfo.label && task['Trạng thái'] !== 'Đã Hoàn Thành') || (warningInfo.label === warningStatus);
+                let dateMatch = true;
+                if (fromDate || toDate) {
+                    const taskDate = parseDate(task['Ngày giao']);
+                    if (!taskDate) dateMatch = false;
+                    else if ((fromDate && taskDate < fromDate) || (toDate && taskDate > toDate)) dateMatch = false;
+                }
+                return typeMatch && assigneeMatch && searchMatch && coreStatusMatch && warningMatch && dateMatch;
+            });
+            currentPage = 1;
+            renderTable(filteredTasks);
+            renderPaginationControls();
+            updateKPIs(filteredTasks);
+            updateCharts(filteredTasks);
+        }
+        function openTaskModal(task = null) {
+            const form = document.getElementById('taskForm');
+            form.reset();
+            const formContainer = form.querySelector('div.grid');
+            formContainer.innerHTML = '';
+            TASK_FIELDS.forEach(field => {
+                const value = task ? task[field] : (field === 'nguoiPhuTrach' && currentUserProfile.role === 'member' ? currentUserProfile.name : '');
+                const div = document.createElement('div');
+                const displayName = field === 'nguoiPhuTrach' ? 'Người phụ trách' : field;
+                if (displayName.includes('NỘI DUNG') || displayName.includes('Ghi chú')) div.className = 'md:col-span-2';
+                let inputHtml;
+                if (PREDEFINED_LISTS[field]) {
+                    const options = PREDEFINED_LISTS[field].map(opt => `<option value="${opt}" ${opt===value?'selected':''}>${opt}</option>`).join('');
+                    inputHtml = `<select id="field-${field}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2">${options}</select>`;
+                } else {
+                    const isDate = displayName.includes('Ngày') || displayName.includes('Hạn');
+                    inputHtml = `<input type="text" id="field-${field}" value="${value}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2" ${isDate?'placeholder="dd/mm/yyyy"':''}>`;
+                }
+                div.innerHTML = `<label for="field-${field}" class="block text-sm font-medium">${displayName}</label>${inputHtml}`;
+                formContainer.appendChild(div);
+                if (displayName.includes('Ngày') || displayName.includes('Hạn')) { document.getElementById(`field-${field}`).addEventListener('input', formatDateInput); }
+            });
+            document.getElementById('modalTitle').textContent = task ? 'Chỉnh sửa Công Việc' : 'Thêm Công Việc Mới';
+            document.getElementById('taskId').value = task ? task.id : '';
+            const deleteButton = document.getElementById('deleteTaskButton');
+            const canDelete = currentUserProfile && currentUserProfile.role === 'leader';
+            deleteButton.style.display = task && canDelete ? 'block' : 'none';
+            deleteButton.onclick = deleteTask;
+            document.getElementById('taskModal').classList.remove('hidden');
+        }
+        function closeTaskModal() { document.getElementById('taskModal').classList.add('hidden'); }
+        function closeWelcomeModal() {
+            const modal = document.getElementById('welcomeModal');
+            const modalContent = document.getElementById('welcomeModalContent');
+            modalContent.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => { modal.classList.add('hidden'); }, 300);
+        }
+        function formatDateInput(e) { let input = e.target; let value = input.value.replace(/\D/g, ''); if (value.length > 2) value = value.substring(0, 2) + '/' + value.substring(2); if (value.length > 5) value = value.substring(0, 5) + '/' + value.substring(5, 9); input.value = value; }
+        function updateKPIs(data) { document.getElementById('kpis').innerHTML = `<div class="kpi-card section-card border-t-4 border-blue-500"><p class="text-sm text-slate-500">Tổng CV (đã tải)</p><p class="text-2xl font-bold">${data.length}</p></div><div class="kpi-card section-card border-t-4 border-green-500"><p class="text-sm text-slate-500">Hoàn thành</p><p class="text-2xl font-bold text-green-600">${data.filter(t=>t['Trạng thái']==='Đã Hoàn Thành').length}</p></div><div class="kpi-card section-card border-t-4 border-red-500"><p class="text-sm text-slate-500">Quá hạn</p><p class="text-2xl font-bold text-red-600">${data.filter(t=>getWarningStatus(t).label==='Quá Hạn').length}</p></div><div class="kpi-card section-card border-t-4 border-yellow-500"><p class="text-sm text-slate-500">Sắp đến hạn</p><p class="text-2xl font-bold text-yellow-600">${data.filter(t=>getWarningStatus(t).label==='Sắp đến hạn').length}</p></div>`; }
+        function updateCharts(data) {
+            const chartsContainer = document.getElementById('charts');
+            chartsContainer.innerHTML = `<div class="section-card"><h3 class="text-lg font-semibold text-center mb-4 text-slate-700">Tỷ lệ Trạng thái</h3><div class="chart-container"><canvas id="statusChart"></canvas></div></div><div class="section-card"><h3 class="text-lg font-semibold text-center mb-4 text-slate-700">Khối lượng Công việc</h3><div class="chart-container"><canvas id="workloadChart"></canvas></div></div><div class="section-card md:col-span-2 lg:col-span-1"><h3 class="text-lg font-semibold text-center mb-4 text-slate-700">Tình trạng theo Loại CV</h3><div class="chart-container"><canvas id="taskTypeStatusChart"></canvas></div></div>`;
+            Chart.register(ChartDataLabels);
+            const DATALABELS_CONFIG = { formatter: v => v > 0 ? v : '', color: '#fff', font: { weight: 'bold' } };
+            const CORE_STATUSES = { 'Đã Hoàn Thành': '#22c55e', 'Đang Thực Hiện': '#3b82f6', 'Quá Hạn': '#ef4444', 'Sắp đến hạn': '#f59e0b' };
+            const ALL_STATUSES = Object.keys(CORE_STATUSES);
+            if (statusChart) statusChart.destroy();
+            if (workloadChart) workloadChart.destroy();
+            if (taskTypeStatusChart) taskTypeStatusChart.destroy();
+            const statusCounts = ALL_STATUSES.reduce((a, s) => ({...a, [s]: 0}), {});
+            data.forEach(t => { const s = getOverallStatus(t); if (s in statusCounts) statusCounts[s]++; });
+            statusChart = new Chart('statusChart', { type: 'doughnut', data: { labels: ALL_STATUSES, datasets: [{ data: ALL_STATUSES.map(s => statusCounts[s]), backgroundColor: ALL_STATUSES.map(s => CORE_STATUSES[s]) }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }, datalabels: DATALABELS_CONFIG } } });
+            const assignees = PREDEFINED_LISTS.nguoiPhuTrach;
+            workloadChart = new Chart('workloadChart', { type: 'bar', data: { labels: assignees, datasets: ALL_STATUSES.map(s => ({ label: s, data: assignees.map(a => data.filter(t => t['nguoiPhuTrach'] === a && getOverallStatus(t) === s).length), backgroundColor: CORE_STATUSES[s] })) }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } }, plugins: { legend: { position: 'bottom' }, datalabels: DATALABELS_CONFIG } } });
+            const taskTypes = [...new Set(tasksData.map(t => t['Loại công việc']))].filter(Boolean);
+            taskTypeStatusChart = new Chart('taskTypeStatusChart', { type: 'bar', data: { labels: taskTypes, datasets: ALL_STATUSES.map(s => ({ label: s, data: taskTypes.map(type => data.filter(t => t['Loại công việc'] === type && getOverallStatus(t) === s).length), backgroundColor: CORE_STATUSES[s] })) }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } }, plugins: { legend: { position: 'bottom' }, datalabels: DATALABELS_CONFIG } } });
+        }
+        function renderPaginationControls() {
+            const el = document.getElementById('paginationControls');
+            const totalTasks = filteredTasks.length;
+            const totalPages = Math.ceil(totalTasks / CLIENT_SIDE_ROWS_PER_PAGE);
+            if (totalPages <= 1) { el.innerHTML = ''; return; }
+            const startRow = (currentPage - 1) * CLIENT_SIDE_ROWS_PER_PAGE + 1;
+            const endRow = Math.min(currentPage * CLIENT_SIDE_ROWS_PER_PAGE, totalTasks);
+            el.innerHTML = `<div class="text-sm text-slate-700">Hiển thị <span class="font-medium">${startRow}</span> đến <span class="font-medium">${endRow}</span> trên <span class="font-medium">${totalTasks}</span> công việc</div><div class="flex items-center space-x-2"><button id="prevPage" class="px-3 py-1 border rounded-lg" ${currentPage===1?'disabled':''}>Trang trước</button><span>Trang ${currentPage} / ${totalPages}</span><button id="nextPage" class="px-3 py-1 border rounded-lg" ${currentPage===totalPages?'disabled':''}>Trang sau</button></div>`;
+            document.getElementById('prevPage').onclick = () => goToPage(currentPage - 1);
+            document.getElementById('nextPage').onclick = () => goToPage(currentPage + 1);
+        }
+        function goToPage(page) {
+            const totalPages = Math.ceil(filteredTasks.length / CLIENT_SIDE_ROWS_PER_PAGE);
+            currentPage = Math.max(1, Math.min(page, totalPages));
+            renderTable(filteredTasks);
+            renderPaginationControls();
+        }
+        function getWarningStatus(task) {
+            if (task['Trạng thái'] === 'Đã Hoàn Thành') return {};
+            const dueDateStr = task['Hạn xử lý'];
+            if (!dueDateStr) return {};
+            const dateParts = dueDateStr.split('/');
+            if (dateParts.length !== 3) return {};
+            const dueDate = new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`);
+            if (isNaN(dueDate.getTime())) return {};
+            const today = new Date(); today.setHours(0,0,0,0);
+            const diff = Math.ceil((dueDate - today) / (1000 * 3600 * 24));
+            if (diff < 0) return { label: 'Quá Hạn', colorClass: 'bg-red-100 text-red-800', bgColor: 'bg-red-50' };
+            if (diff <= 3) return { label: 'Sắp đến hạn', colorClass: 'bg-yellow-100 text-yellow-800', bgColor: 'bg-yellow-50' };
+            return {};
+        }
+        function getOverallStatus(task) { if (task['Trạng thái'] === 'Đã Hoàn Thành') return 'Đã Hoàn Thành'; const warning = getWarningStatus(task); return warning.label || 'Đang Thực Hiện'; }
+        function downloadTemplate() { const displayHeaders = TASK_FIELDS.map(f => f === 'nguoiPhuTrach' ? 'Người phụ trách' : f); const worksheet = XLSX.utils.aoa_to_sheet([displayHeaders]); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, worksheet, 'Tasks'); XLSX.writeFile(workbook, "Mau_Nhap_Cong_Viec.xlsx"); }
+        async function importFromExcel(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            try {
+                const data = await file.arrayBuffer();
+                const workbook = XLSX.read(data);
+                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, {raw: false});
+                if (jsonData.length === 0) { alert("File Excel rỗng."); return; }
+                const headers = Object.keys(jsonData[0]);
+                const displayHeaders = TASK_FIELDS.map(f => f === 'nguoiPhuTrach' ? 'Người phụ trách' : f);
+                const missingHeaders = displayHeaders.filter(f => !headers.includes(f));
+                if (missingHeaders.length > 0) { alert(`File Excel thiếu các cột sau: ${missingHeaders.join(', ')}`); return; }
+                const batch = db.batch();
+                jsonData.forEach(row => {
+                    const newTask = {};
+                    TASK_FIELDS.forEach(field => { const displayName = field === 'nguoiPhuTrach' ? 'Người phụ trách' : field; newTask[field] = row[displayName] || ''; });
+                    newTask.createdBy = auth.currentUser.email;
+                    newTask.createdAt = new Date();
+                    const docRef = db.collection("tasks").doc();
+                    batch.set(docRef, newTask);
+                });
+                await batch.commit();
+                alert(`Đã nhập thành công ${jsonData.length} công việc!`);
+                location.reload();
+            } catch (error) {
+                console.error("Error importing from Excel:", error);
+                alert("Có lỗi xảy ra khi nhập file.");
+            } finally {
+                event.target.value = '';
+            }
+        }
+    }
+    </script>
+</body>
+</html>
+
