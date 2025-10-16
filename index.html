@@ -36,7 +36,6 @@
             <p id="form-title" class="text-slate-500 mb-6 text-center">Đăng nhập để tiếp tục</p>
 
             <form id="loginForm">
-                <!-- UPDATED: Removed 'required' attribute from here. It will be managed by JS. -->
                 <input type="text" id="nameInput" class="w-full px-4 py-2 border rounded-lg mb-3 hidden" placeholder="Họ và Tên">
                 <input type="email" id="emailInput" class="w-full px-4 py-2 border rounded-lg mb-3" placeholder="Email" required>
                 <input type="password" id="passwordInput" class="w-full px-4 py-2 border rounded-lg" placeholder="Mật khẩu" required>
@@ -89,6 +88,15 @@
         </header>
 
         <main id="mainContent">
+            <!-- NEW: Admin Section for user approval -->
+            <section id="adminSection" class="mb-6 section-card hidden">
+                <h2 class="text-xl font-semibold text-slate-700 mb-4">Phê duyệt Người dùng mới</h2>
+                <div id="pendingUsersList" class="space-y-3">
+                    <!-- Pending users will be injected here by JS -->
+                </div>
+                <p id="noPendingUsers" class="text-slate-500 hidden">Không có người dùng nào đang chờ duyệt.</p>
+            </section>
+            
             <section class="mb-6 section-card">
                  <div class="flex flex-wrap justify-between items-center mb-4">
                     <h2 class="text-xl font-semibold text-slate-700">Bộ lọc và Tìm kiếm</h2>
@@ -140,7 +148,8 @@
         <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-lg text-center transform transition-all scale-95 opacity-0" id="welcomeModalContent">
             <h2 id="welcomeMessage" class="text-2xl font-bold text-slate-800 mb-4"></h2>
             <p class="text-slate-600 mb-6">Tác Giả: Lê Quang Huy – Tổ QLDN 1 – TCS5 TP Hà Nội</p>
-            <button onclick="closeWelcomeModal()" class="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">Đóng</button>
+            <!-- UPDATED: Removed inline onclick and added an ID -->
+            <button id="closeWelcomeButton" class="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">Đóng</button>
         </div>
     </div>
 
@@ -178,6 +187,7 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
 
+        let allUsersData = [];
         let tasksData = [];
         let filteredTasks = [];
         let currentPage = 1;
@@ -237,7 +247,7 @@
 
             isLogin = true; 
             nameInput.classList.add('hidden');
-            nameInput.required = false; // --- UPDATED: Ensure required is false on reset
+            nameInput.required = false;
             formTitle.textContent = 'Đăng nhập để tiếp tục';
             loginForm.querySelector('button').textContent = 'Đăng nhập';
             if(toggleFormLink) toggleFormLink.textContent = 'Chưa có tài khoản? Đăng ký';
@@ -290,7 +300,7 @@
                 const nameInput = document.getElementById('nameInput');
                 const formTitle = document.getElementById('form-title');
                 nameInput.classList.toggle('hidden', isLogin);
-                nameInput.required = !isLogin; // --- UPDATED: Dynamically set required property
+                nameInput.required = !isLogin;
                 formTitle.textContent = isLogin ? 'Đăng nhập để tiếp tục' : 'Tạo tài khoản mới';
                 loginForm.querySelector('button').textContent = isLogin ? 'Đăng nhập' : 'Đăng ký';
                 toggleFormLink.textContent = isLogin ? 'Chưa có tài khoản? Đăng ký' : 'Đã có tài khoản? Đăng nhập';
@@ -307,6 +317,7 @@
                 tasksData = [];
                 filteredTasks = [];
                 lastVisibleTask = null;
+                allUsersData = [];
                 authContainer.classList.remove('hidden');
                 dashboardContainer.classList.add('hidden');
                 updateLoginStatus(''); 
@@ -333,8 +344,16 @@
                 
                 updateLoginStatus('Đang tải danh sách người dùng');
                 const usersSnapshot = await db.collection("users").get();
-                PREDEFINED_LISTS.nguoiPhuTrach = usersSnapshot.docs.map(doc => doc.data().name).filter(Boolean).sort();
+                allUsersData = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                PREDEFINED_LISTS.nguoiPhuTrach = allUsersData
+                    .filter(u => u.role !== 'pending')
+                    .map(u => u.name)
+                    .filter(Boolean).sort();
                 
+                if (currentUserProfile.role === 'leader') {
+                    renderAdminSection();
+                }
+
                 updateLoginStatus('Đang tải dữ liệu công việc');
                 await initializeApp();
 
@@ -366,6 +385,7 @@
             document.getElementById('importExcelButton').onclick = () => document.getElementById('importExcelInput').click();
             document.getElementById('importExcelInput').onchange = importFromExcel;
             loadMoreButton.onclick = fetchMoreTasks;
+            document.getElementById('closeWelcomeButton').addEventListener('click', closeWelcomeModal);
 
             tasksData = [];
             lastVisibleTask = null;
@@ -651,6 +671,96 @@
                 alert("Có lỗi xảy ra khi nhập file.");
             } finally {
                 event.target.value = '';
+            }
+        }
+        
+        // --- NEW: Admin section functions ---
+        function renderAdminSection() {
+            const adminSection = document.getElementById('adminSection');
+            const pendingList = document.getElementById('pendingUsersList');
+            const noPendingMsg = document.getElementById('noPendingUsers');
+            
+            pendingList.innerHTML = ''; 
+
+            const pendingUsers = allUsersData.filter(user => user.role === 'pending');
+
+            if (pendingUsers.length === 0) {
+                noPendingMsg.classList.remove('hidden');
+            } else {
+                 noPendingMsg.classList.add('hidden');
+            }
+
+            pendingUsers.forEach(user => {
+                const li = document.createElement('div');
+                li.className = 'flex items-center justify-between p-3 bg-slate-50 rounded-lg';
+                li.id = `pending-user-${user.id}`;
+
+                li.innerHTML = `
+                    <div>
+                        <p class="font-semibold text-slate-800">${user.name}</p>
+                        <p class="text-sm text-slate-500">${user.email}</p>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button data-userid="${user.id}" class="approve-user-btn px-3 py-1 text-sm bg-green-100 text-green-700 font-semibold rounded-md hover:bg-green-200">Duyệt</button>
+                        <button data-userid="${user.id}" class="reject-user-btn px-3 py-1 text-sm bg-red-100 text-red-700 font-semibold rounded-md hover:bg-red-200">Từ chối</button>
+                    </div>
+                `;
+                pendingList.appendChild(li);
+            });
+
+            // Using event delegation for buttons
+            pendingList.addEventListener('click', (e) => {
+                const target = e.target;
+                const userId = target.dataset.userid;
+                if (!userId) return;
+
+                if (target.classList.contains('approve-user-btn')) {
+                    approveUser(userId);
+                } else if (target.classList.contains('reject-user-btn')) {
+                    rejectUser(userId);
+                }
+            });
+
+            adminSection.classList.remove('hidden');
+        }
+
+        async function approveUser(userId) {
+            try {
+                await db.collection('users').doc(userId).update({ role: 'member' });
+                
+                const userIndex = allUsersData.findIndex(u => u.id === userId);
+                if (userIndex > -1) {
+                    allUsersData[userIndex].role = 'member';
+                }
+                
+                renderAdminSection();
+                
+                PREDEFINED_LISTS.nguoiPhuTrach = allUsersData
+                    .filter(user => user.role !== 'pending')
+                    .map(user => user.name)
+                    .filter(Boolean)
+                    .sort();
+                populateFilters(); 
+
+                alert('Đã duyệt người dùng thành công!');
+            } catch (error) {
+                console.error("Error approving user:", error);
+                alert('Có lỗi xảy ra khi duyệt người dùng.');
+            }
+        }
+
+        async function rejectUser(userId) {
+            if (!confirm('Bạn có chắc chắn muốn từ chối và xóa người dùng này không? Thao tác này sẽ xóa hồ sơ của họ.')) {
+                return;
+            }
+            try {
+                await db.collection('users').doc(userId).delete();
+                allUsersData = allUsersData.filter(u => u.id !== userId);
+                renderAdminSection();
+                alert('Đã từ chối và xóa người dùng.');
+            } catch (error) {
+                console.error("Error rejecting user:", error);
+                alert('Có lỗi xảy ra khi từ chối người dùng.');
             }
         }
         
