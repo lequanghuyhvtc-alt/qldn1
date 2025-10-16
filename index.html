@@ -83,7 +83,7 @@
                 </div>
                 <button id="logoutButton" class="ml-4 px-3 py-1.5 text-xs font-medium text-white bg-rose-500 rounded-md hover:bg-rose-600 transition-colors">Đăng xuất</button>
             </div>
-            <h1 class="text-3xl md:text-4xl font-bold text-slate-900">BẢNG ĐIỀU HÀNH SỐ</h1>
+            <h1 class="text-3xl md:text-4xl font-bold text-slate-900">Bảng Điều Hành Số</h1>
             <p class="text-slate-500 mt-2">Phục vụ Quản lý và Theo dõi tiến độ công việc</p>
         </header>
 
@@ -413,10 +413,6 @@
                 lastVisibleTask = snapshot.docs[snapshot.docs.length - 1];
 
                 loadMoreContainer.classList.toggle('hidden', newTasks.length < SERVER_SIDE_PAGE_SIZE);
-
-                // --- UPDATED: Populate assignees from tasks data ---
-                const uniqueAssignees = [...new Set(tasksData.map(task => task.nguoiPhuTrach))].filter(Boolean).sort();
-                PREDEFINED_LISTS.nguoiPhuTrach = uniqueAssignees;
                 
                 if (isInitial) {
                     populateFilters();
@@ -485,10 +481,7 @@
             filtersContainer.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"><div><label class="block text-sm font-medium text-slate-600 mb-1">Loại công việc</label><select id="taskTypeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Người phụ trách</label><select id="assigneeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Trạng thái</label><select id="statusFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Đã Hoàn Thành">Đã Hoàn Thành</option><option value="Đang Thực Hiện">Đang Thực Hiện</option></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Cảnh Báo</label><select id="warningFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Quá Hạn">Quá Hạn</option><option value="Sắp đến hạn">Sắp đến hạn</option><option value="Không có">Không có</option></select></div></div><div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div><label for="fromDateFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Từ ngày)</label><input type="text" id="fromDateFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg"></div><div><label for="toDateFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Đến ngày)</label><input type="text" id="toDateFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg"></div><div class="md:col-span-2"><label class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm (MST/Nội dung)</label><input type="text" id="searchFilter" placeholder="Nhập từ khóa..." class="w-full p-2 border rounded-lg"></div></div>`;
             const populateSelect = (id, key) => {
                 const select = document.getElementById(id);
-                // --- UPDATED: Use a dynamic list for assignees, static for task types ---
-                const values = (key === 'nguoiPhuTrach') 
-                    ? PREDEFINED_LISTS.nguoiPhuTrach 
-                    : PREDEFINED_LISTS[key] || [...new Set(tasksData.map(t => t[key]))].filter(Boolean).sort();
+                const values = PREDEFINED_LISTS[key] || [];
 
                 select.innerHTML = '<option value="all">Tất cả</option>';
                 values.forEach(val => select.innerHTML += `<option value="${val}">${val}</option>`);
@@ -523,6 +516,15 @@
         }
 
         function applyFilters() {
+            const uniqueAssignees = [...new Set(tasksData.map(task => task.nguoiPhuTrach))].filter(Boolean).sort();
+            PREDEFINED_LISTS.nguoiPhuTrach = uniqueAssignees;
+            const assigneeFilterEl = document.getElementById('assigneeFilter');
+            const currentAssignee = assigneeFilterEl.value;
+            assigneeFilterEl.innerHTML = '<option value="all">Tất cả</option>';
+            uniqueAssignees.forEach(val => assigneeFilterEl.innerHTML += `<option value="${val}">${val}</option>`);
+            assigneeFilterEl.value = currentAssignee;
+
+
             const type = document.getElementById('taskTypeFilter').value;
             const assignee = document.getElementById('assigneeFilter').value;
             const coreStatus = document.getElementById('statusFilter').value;
@@ -592,7 +594,26 @@
             modalContent.classList.add('scale-95', 'opacity-0');
             setTimeout(() => { modal.classList.add('hidden'); }, 300);
         }
-        function formatDateInput(e) { let input = e.target; let value = input.value.replace(/\D/g, ''); if (value.length > 2) value = value.substring(0, 2) + '/' + value.substring(2); if (value.length > 5) value = value.substring(0, 5) + '/' + value.substring(5, 9); input.value = value; }
+        // --- UPDATED: More robust date formatting function ---
+        function formatDateInput(e) {
+            let input = e.target;
+            let value = input.value.replace(/\D/g, ''); 
+            
+            if (value.length > 8) {
+                value = value.substring(0, 8);
+            }
+
+            let formattedValue = '';
+            if (value.length > 4) {
+                formattedValue = value.substring(0, 2) + '/' + value.substring(2, 4) + '/' + value.substring(4);
+            } else if (value.length > 2) {
+                formattedValue = value.substring(0, 2) + '/' + value.substring(2);
+            } else {
+                formattedValue = value;
+            }
+            
+            input.value = formattedValue;
+        }
         function updateKPIs(data) { document.getElementById('kpis').innerHTML = `<div class="kpi-card section-card border-t-4 border-blue-500"><p class="text-sm text-slate-500">Tổng CV (đã tải)</p><p class="text-2xl font-bold">${data.length}</p></div><div class="kpi-card section-card border-t-4 border-green-500"><p class="text-sm text-slate-500">Hoàn thành</p><p class="text-2xl font-bold text-green-600">${data.filter(t=>t['Trạng thái']==='Đã Hoàn Thành').length}</p></div><div class="kpi-card section-card border-t-4 border-red-500"><p class="text-sm text-slate-500">Quá hạn</p><p class="text-2xl font-bold text-red-600">${data.filter(t=>getWarningStatus(t).label==='Quá Hạn').length}</p></div><div class="kpi-card section-card border-t-4 border-yellow-500"><p class="text-sm text-slate-500">Sắp đến hạn</p><p class="text-2xl font-bold text-yellow-600">${data.filter(t=>getWarningStatus(t).label==='Sắp đến hạn').length}</p></div>`; }
         function updateCharts(data) {
             const chartsContainer = document.getElementById('charts');
