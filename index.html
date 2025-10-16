@@ -476,19 +476,32 @@
             }
         }
 
+        // --- UPDATED: New debounce helper and logic for attaching listeners ---
+        let debounceTimer;
+        function debounce(func, delay) {
+            return function(...args) {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => func.apply(this, args), delay);
+            };
+        }
+        const debouncedApplyFilters = debounce(applyFilters, 300);
+
         function populateFilters() {
             const filtersContainer = document.getElementById('filters');
             filtersContainer.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"><div><label class="block text-sm font-medium text-slate-600 mb-1">Loại công việc</label><select id="taskTypeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Người phụ trách</label><select id="assigneeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Trạng thái</label><select id="statusFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Đã Hoàn Thành">Đã Hoàn Thành</option><option value="Đang Thực Hiện">Đang Thực Hiện</option></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Cảnh Báo</label><select id="warningFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Quá Hạn">Quá Hạn</option><option value="Sắp đến hạn">Sắp đến hạn</option><option value="Không có">Không có</option></select></div></div><div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div><label for="fromDateFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Từ ngày)</label><input type="text" id="fromDateFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg"></div><div><label for="toDateFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Đến ngày)</label><input type="text" id="toDateFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg"></div><div class="md:col-span-2"><label class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm (MST/Nội dung)</label><input type="text" id="searchFilter" placeholder="Nhập từ khóa..." class="w-full p-2 border rounded-lg"></div></div>`;
+            
             const populateSelect = (id, key) => {
                 const select = document.getElementById(id);
                 const values = PREDEFINED_LISTS[key] || [];
-
                 select.innerHTML = '<option value="all">Tất cả</option>';
                 values.forEach(val => select.innerHTML += `<option value="${val}">${val}</option>`);
             };
             populateSelect('taskTypeFilter', 'Loại công việc');
             populateSelect('assigneeFilter', 'nguoiPhuTrach');
-            filtersContainer.querySelectorAll('select, input').forEach(el => el.addEventListener('input', applyFilters));
+
+            // Attach listeners
+            filtersContainer.querySelectorAll('select').forEach(el => el.addEventListener('change', applyFilters));
+            document.getElementById('searchFilter').addEventListener('input', debouncedApplyFilters);
             document.getElementById('fromDateFilter').addEventListener('input', formatDateInput);
             document.getElementById('toDateFilter').addEventListener('input', formatDateInput);
         }
@@ -594,7 +607,6 @@
             modalContent.classList.add('scale-95', 'opacity-0');
             setTimeout(() => { modal.classList.add('hidden'); }, 300);
         }
-        // --- UPDATED: More robust date formatting function ---
         function formatDateInput(e) {
             let input = e.target;
             let value = input.value.replace(/\D/g, ''); 
@@ -613,6 +625,11 @@
             }
             
             input.value = formattedValue;
+            
+            // --- UPDATED: Also trigger filter update ---
+            if (input.id.includes('Filter')) {
+                debouncedApplyFilters();
+            }
         }
         function updateKPIs(data) { document.getElementById('kpis').innerHTML = `<div class="kpi-card section-card border-t-4 border-blue-500"><p class="text-sm text-slate-500">Tổng CV (đã tải)</p><p class="text-2xl font-bold">${data.length}</p></div><div class="kpi-card section-card border-t-4 border-green-500"><p class="text-sm text-slate-500">Hoàn thành</p><p class="text-2xl font-bold text-green-600">${data.filter(t=>t['Trạng thái']==='Đã Hoàn Thành').length}</p></div><div class="kpi-card section-card border-t-4 border-red-500"><p class="text-sm text-slate-500">Quá hạn</p><p class="text-2xl font-bold text-red-600">${data.filter(t=>getWarningStatus(t).label==='Quá Hạn').length}</p></div><div class="kpi-card section-card border-t-4 border-yellow-500"><p class="text-sm text-slate-500">Sắp đến hạn</p><p class="text-2xl font-bold text-yellow-600">${data.filter(t=>getWarningStatus(t).label==='Sắp đến hạn').length}</p></div>`; }
         function updateCharts(data) {
