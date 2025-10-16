@@ -88,9 +88,8 @@
         </header>
 
         <main id="mainContent">
-            <!-- NEW: Admin Section for user approval -->
             <section id="adminSection" class="mb-6 section-card hidden">
-                <h2 class="text-xl font-semibold text-slate-700 mb-4">Phê duyệt Người dùng mới</h2>
+                <h2 class="text-xl font-semibold text-slate-700 mb-4">Phê duyệt & Phân quyền User</h2>
                 <div id="pendingUsersList" class="space-y-3">
                     <!-- Pending users will be injected here by JS -->
                 </div>
@@ -148,7 +147,6 @@
         <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-lg text-center transform transition-all scale-95 opacity-0" id="welcomeModalContent">
             <h2 id="welcomeMessage" class="text-2xl font-bold text-slate-800 mb-4"></h2>
             <p class="text-slate-600 mb-6">Tác Giả: Lê Quang Huy – Tổ QLDN 1 – TCS5 TP Hà Nội</p>
-            <!-- UPDATED: Removed inline onclick and added an ID -->
             <button id="closeWelcomeButton" class="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">Đóng</button>
         </div>
     </div>
@@ -342,15 +340,10 @@
 
                 document.getElementById('userName').textContent = currentUserProfile.name;
                 
-                updateLoginStatus('Đang tải danh sách người dùng');
-                const usersSnapshot = await db.collection("users").get();
-                allUsersData = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                PREDEFINED_LISTS.nguoiPhuTrach = allUsersData
-                    .filter(u => u.role !== 'pending')
-                    .map(u => u.name)
-                    .filter(Boolean).sort();
-                
                 if (currentUserProfile.role === 'leader') {
+                    updateLoginStatus('Đang tải danh sách người dùng');
+                    const usersSnapshot = await db.collection("users").get();
+                    allUsersData = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     renderAdminSection();
                 }
 
@@ -391,7 +384,6 @@
             lastVisibleTask = null;
 
             renderTableHeader();
-            populateFilters();
             
             return fetchMoreTasks(true);
         }
@@ -421,6 +413,14 @@
                 lastVisibleTask = snapshot.docs[snapshot.docs.length - 1];
 
                 loadMoreContainer.classList.toggle('hidden', newTasks.length < SERVER_SIDE_PAGE_SIZE);
+
+                // --- UPDATED: Populate assignees from tasks data ---
+                const uniqueAssignees = [...new Set(tasksData.map(task => task.nguoiPhuTrach))].filter(Boolean).sort();
+                PREDEFINED_LISTS.nguoiPhuTrach = uniqueAssignees;
+                
+                if (isInitial) {
+                    populateFilters();
+                }
 
                 applyFilters();
 
@@ -485,7 +485,11 @@
             filtersContainer.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"><div><label class="block text-sm font-medium text-slate-600 mb-1">Loại công việc</label><select id="taskTypeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Người phụ trách</label><select id="assigneeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Trạng thái</label><select id="statusFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Đã Hoàn Thành">Đã Hoàn Thành</option><option value="Đang Thực Hiện">Đang Thực Hiện</option></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Cảnh Báo</label><select id="warningFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Quá Hạn">Quá Hạn</option><option value="Sắp đến hạn">Sắp đến hạn</option><option value="Không có">Không có</option></select></div></div><div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div><label for="fromDateFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Từ ngày)</label><input type="text" id="fromDateFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg"></div><div><label for="toDateFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Đến ngày)</label><input type="text" id="toDateFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg"></div><div class="md:col-span-2"><label class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm (MST/Nội dung)</label><input type="text" id="searchFilter" placeholder="Nhập từ khóa..." class="w-full p-2 border rounded-lg"></div></div>`;
             const populateSelect = (id, key) => {
                 const select = document.getElementById(id);
-                const values = PREDEFINED_LISTS[key] && PREDEFINED_LISTS[key].length > 0 ? PREDEFINED_LISTS[key] : [...new Set(tasksData.map(t => t[key]))].filter(Boolean).sort();
+                // --- UPDATED: Use a dynamic list for assignees, static for task types ---
+                const values = (key === 'nguoiPhuTrach') 
+                    ? PREDEFINED_LISTS.nguoiPhuTrach 
+                    : PREDEFINED_LISTS[key] || [...new Set(tasksData.map(t => t[key]))].filter(Boolean).sort();
+
                 select.innerHTML = '<option value="all">Tất cả</option>';
                 values.forEach(val => select.innerHTML += `<option value="${val}">${val}</option>`);
             };
@@ -674,7 +678,6 @@
             }
         }
         
-        // --- NEW: Admin section functions ---
         function renderAdminSection() {
             const adminSection = document.getElementById('adminSection');
             const pendingList = document.getElementById('pendingUsersList');
@@ -684,38 +687,39 @@
 
             const pendingUsers = allUsersData.filter(user => user.role === 'pending');
 
-            if (pendingUsers.length === 0) {
-                noPendingMsg.classList.remove('hidden');
-            } else {
-                 noPendingMsg.classList.add('hidden');
-            }
+            noPendingMsg.classList.toggle('hidden', pendingUsers.length > 0);
 
             pendingUsers.forEach(user => {
-                const li = document.createElement('div');
-                li.className = 'flex items-center justify-between p-3 bg-slate-50 rounded-lg';
-                li.id = `pending-user-${user.id}`;
+                const userDiv = document.createElement('div');
+                userDiv.className = 'flex items-center justify-between p-3 bg-slate-50 rounded-lg';
+                userDiv.id = `pending-user-${user.id}`;
 
-                li.innerHTML = `
+                userDiv.innerHTML = `
                     <div>
                         <p class="font-semibold text-slate-800">${user.name}</p>
                         <p class="text-sm text-slate-500">${user.email}</p>
                     </div>
-                    <div class="flex space-x-2">
-                        <button data-userid="${user.id}" class="approve-user-btn px-3 py-1 text-sm bg-green-100 text-green-700 font-semibold rounded-md hover:bg-green-200">Duyệt</button>
+                    <div class="flex items-center space-x-2">
+                        <select data-userid="${user.id}" class="role-select bg-white border border-slate-300 rounded-md shadow-sm p-1.5 text-sm">
+                            <option value="member">Member</option>
+                            <option value="leader">Leader</option>
+                        </select>
+                        <button data-userid="${user.id}" class="update-role-btn px-3 py-1 text-sm bg-blue-100 text-blue-700 font-semibold rounded-md hover:bg-blue-200">Cập nhật</button>
                         <button data-userid="${user.id}" class="reject-user-btn px-3 py-1 text-sm bg-red-100 text-red-700 font-semibold rounded-md hover:bg-red-200">Từ chối</button>
                     </div>
                 `;
-                pendingList.appendChild(li);
+                pendingList.appendChild(userDiv);
             });
 
-            // Using event delegation for buttons
             pendingList.addEventListener('click', (e) => {
                 const target = e.target;
                 const userId = target.dataset.userid;
                 if (!userId) return;
 
-                if (target.classList.contains('approve-user-btn')) {
-                    approveUser(userId);
+                if (target.classList.contains('update-role-btn')) {
+                    const selectEl = pendingList.querySelector(`.role-select[data-userid="${userId}"]`);
+                    const newRole = selectEl.value;
+                    updateUserRole(userId, newRole);
                 } else if (target.classList.contains('reject-user-btn')) {
                     rejectUser(userId);
                 }
@@ -724,33 +728,26 @@
             adminSection.classList.remove('hidden');
         }
 
-        async function approveUser(userId) {
+        async function updateUserRole(userId, newRole) {
             try {
-                await db.collection('users').doc(userId).update({ role: 'member' });
+                await db.collection('users').doc(userId).update({ role: newRole });
                 
                 const userIndex = allUsersData.findIndex(u => u.id === userId);
                 if (userIndex > -1) {
-                    allUsersData[userIndex].role = 'member';
+                    allUsersData[userIndex].role = newRole;
                 }
                 
-                renderAdminSection();
+                renderAdminSection(); 
                 
-                PREDEFINED_LISTS.nguoiPhuTrach = allUsersData
-                    .filter(user => user.role !== 'pending')
-                    .map(user => user.name)
-                    .filter(Boolean)
-                    .sort();
-                populateFilters(); 
-
-                alert('Đã duyệt người dùng thành công!');
+                alert(`Đã cập nhật quyền cho người dùng thành "${newRole}"!`);
             } catch (error) {
-                console.error("Error approving user:", error);
-                alert('Có lỗi xảy ra khi duyệt người dùng.');
+                console.error("Error updating user role:", error);
+                alert('Có lỗi xảy ra khi cập nhật quyền.');
             }
         }
 
         async function rejectUser(userId) {
-            if (!confirm('Bạn có chắc chắn muốn từ chối và xóa người dùng này không? Thao tác này sẽ xóa hồ sơ của họ.')) {
+            if (!confirm('Bạn có chắc chắn muốn từ chối và xóa người dùng này không?')) {
                 return;
             }
             try {
