@@ -206,7 +206,7 @@
 
         function updateLoginStatus(message, isError = false) {
             const loginForm = document.getElementById('loginForm');
-            const toggleForm = document.getElementById('toggleForm');
+            const toggleFormLink = document.getElementById('toggleForm');
             authErrorEl.style.display = 'none';
             if (message) {
                 if (isError) {
@@ -214,30 +214,41 @@
                     authErrorEl.style.display = 'block';
                     loginStatusContainer.classList.add('hidden');
                     loginForm.style.display = 'block';
-                    if (toggleForm) toggleForm.parentElement.style.display = 'block';
+                    if (toggleFormLink) toggleFormLink.parentElement.style.display = 'block';
                 } else {
                     loginStatusText.textContent = message + '...';
                     loginStatusContainer.classList.remove('hidden');
                     loginForm.style.display = 'none';
-                    if (toggleForm) toggleForm.parentElement.style.display = 'none';
+                    if (toggleFormLink) toggleFormLink.parentElement.style.display = 'none';
                 }
             } else {
                 loginStatusContainer.classList.add('hidden');
                 loginForm.style.display = 'block';
-                if (toggleForm) toggleForm.parentElement.style.display = 'block';
+                if (toggleFormLink) toggleFormLink.parentElement.style.display = 'block';
             }
         }
 
-        // --- NEW: Function to set up auth form listeners ---
-        function setupAuthFormListeners() {
+        // --- NEW: Function to reset the Auth Form UI to its default state ---
+        function resetAuthFormUI() {
             const loginForm = document.getElementById('loginForm');
-            const toggleForm = document.getElementById('toggleForm');
+            const toggleFormLink = document.getElementById('toggleForm');
             const nameInput = document.getElementById('nameInput');
             const formTitle = document.getElementById('form-title');
 
-            if (!loginForm) return; // defensive check
+            isLogin = true; // Reset state
+            nameInput.classList.add('hidden');
+            formTitle.textContent = 'Đăng nhập để tiếp tục';
+            loginForm.querySelector('button').textContent = 'Đăng nhập';
+            if(toggleFormLink) toggleFormLink.textContent = 'Chưa có tài khoản? Đăng ký';
+            authErrorEl.style.display = 'none';
+            loginForm.reset(); // Clear input fields
+        }
 
-            loginForm.onsubmit = (e) => {
+        function setupAuthFormListeners() {
+            const loginForm = document.getElementById('loginForm');
+            const toggleFormLink = document.getElementById('toggleForm');
+
+            loginForm.addEventListener('submit', (e) => {
                 e.preventDefault();
                 const email = document.getElementById('emailInput').value;
                 const password = document.getElementById('passwordInput').value;
@@ -248,7 +259,7 @@
                         updateLoginStatus("Sai email hoặc mật khẩu.", true);
                     });
                 } else {
-                    const name = nameInput.value;
+                    const name = document.getElementById('nameInput').value;
                     if (!name) { 
                         updateLoginStatus("Vui lòng nhập họ và tên.", true);
                         return; 
@@ -269,19 +280,21 @@
                             updateLoginStatus(message, true);
                         });
                 }
-            };
+            });
 
-            if (!toggleForm) return;
-
-            toggleForm.onclick = (e) => {
+            toggleFormLink.addEventListener('click', (e) => {
                 e.preventDefault();
                 isLogin = !isLogin;
+                
+                // Instead of calling a complex function, just toggle the UI elements directly
+                const nameInput = document.getElementById('nameInput');
+                const formTitle = document.getElementById('form-title');
                 nameInput.classList.toggle('hidden', isLogin);
-                formTitle.textContent = isLogin ? 'Đăng nhập' : 'Tạo tài khoản mới';
+                formTitle.textContent = isLogin ? 'Đăng nhập để tiếp tục' : 'Tạo tài khoản mới';
                 loginForm.querySelector('button').textContent = isLogin ? 'Đăng nhập' : 'Đăng ký';
-                toggleForm.textContent = isLogin ? 'Chưa có tài khoản? Đăng ký' : 'Đã có tài khoản? Đăng nhập';
+                toggleFormLink.textContent = isLogin ? 'Chưa có tài khoản? Đăng ký' : 'Đã có tài khoản? Đăng nhập';
                 authErrorEl.style.display = 'none';
-            };
+            });
         }
 
 
@@ -297,8 +310,8 @@
                 dashboardContainer.classList.add('hidden');
                 updateLoginStatus(''); 
                 sessionStorage.removeItem('welcomeShown');
-                // --- UPDATED: Re-attach listeners on logout ---
-                setupAuthFormListeners();
+                // --- UPDATED: Manually reset the form UI on logout ---
+                resetAuthFormUI();
             }
         });
 
@@ -343,8 +356,6 @@
                 auth.signOut();
             }
         }
-
-        // --- REMOVED old listener attachments from here ---
 
         document.getElementById('logoutButton').addEventListener('click', () => auth.signOut());
 
@@ -643,7 +654,6 @@
             }
         }
         
-        // --- UPDATED: Initial call to set up listeners for the first time ---
         setupAuthFormListeners();
     });
     </script>
