@@ -135,7 +135,6 @@
                 <div class="mt-6 flex justify-between items-center">
                     <button type="button" id="deleteTaskButton" class="px-4 py-2 bg-rose-600 text-white font-semibold rounded-lg shadow-md hover:bg-rose-700 hidden transition-colors">Xóa Công Việc</button>
                     <div class="flex space-x-3">
-                        <!-- UPDATED: Added an ID to the cancel button -->
                         <button type="button" id="cancelTaskButton" class="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors">Hủy</button>
                         <button type="submit" class="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">Lưu</button>
                     </div>
@@ -380,7 +379,6 @@
             document.getElementById('importExcelInput').onchange = importFromExcel;
             loadMoreButton.onclick = fetchMoreTasks;
             document.getElementById('closeWelcomeButton').addEventListener('click', closeWelcomeModal);
-            // --- UPDATED: Add listener for the cancel button ---
             document.getElementById('cancelTaskButton').addEventListener('click', closeTaskModal);
 
             tasksData = [];
@@ -557,12 +555,20 @@
                 const searchMatch = (task['MST/NỘI DUNG'] || '').toLowerCase().includes(searchTerm);
                 const coreStatusMatch = (coreStatus === 'all') || (coreStatus === 'Đã Hoàn Thành' && task['Trạng thái'] === 'Đã Hoàn Thành') || (coreStatus === 'Đang Thực Hiện' && task['Trạng thái'] !== 'Đã Hoàn Thành');
                 const warningMatch = (warningStatus === 'all') || (warningStatus === 'Không có' && !warningInfo.label && task['Trạng thái'] !== 'Đã Hoàn Thành') || (warningInfo.label === warningStatus);
-                let dateMatch = true;
+                
+                // --- UPDATED: Date range logic fix ---
+                let dateMatch = true; 
                 if (fromDate || toDate) {
                     const taskDate = parseDate(task['Ngày giao']);
-                    if (!taskDate) dateMatch = false;
-                    else if ((fromDate && taskDate < fromDate) || (toDate && taskDate > toDate)) dateMatch = false;
+                    if (!taskDate) {
+                        dateMatch = false; 
+                    } else {
+                        const fromMatch = !fromDate || taskDate >= fromDate;
+                        const toMatch = !toDate || taskDate <= toDate;
+                        dateMatch = fromMatch && toMatch;
+                    }
                 }
+
                 return typeMatch && assigneeMatch && searchMatch && coreStatusMatch && warningMatch && dateMatch;
             });
             currentPage = 1;
