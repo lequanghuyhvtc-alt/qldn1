@@ -135,7 +135,8 @@
                 <div class="mt-6 flex justify-between items-center">
                     <button type="button" id="deleteTaskButton" class="px-4 py-2 bg-rose-600 text-white font-semibold rounded-lg shadow-md hover:bg-rose-700 hidden transition-colors">Xóa Công Việc</button>
                     <div class="flex space-x-3">
-                        <button type="button" onclick="closeTaskModal()" class="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors">Hủy</button>
+                        <!-- UPDATED: Added an ID to the cancel button -->
+                        <button type="button" id="cancelTaskButton" class="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors">Hủy</button>
                         <button type="submit" class="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">Lưu</button>
                     </div>
                 </div>
@@ -379,6 +380,8 @@
             document.getElementById('importExcelInput').onchange = importFromExcel;
             loadMoreButton.onclick = fetchMoreTasks;
             document.getElementById('closeWelcomeButton').addEventListener('click', closeWelcomeModal);
+            // --- UPDATED: Add listener for the cancel button ---
+            document.getElementById('cancelTaskButton').addEventListener('click', closeTaskModal);
 
             tasksData = [];
             lastVisibleTask = null;
@@ -476,7 +479,6 @@
             }
         }
 
-        // --- UPDATED: New debounce helper and logic for attaching listeners ---
         let debounceTimer;
         function debounce(func, delay) {
             return function(...args) {
@@ -499,7 +501,6 @@
             populateSelect('taskTypeFilter', 'Loại công việc');
             populateSelect('assigneeFilter', 'nguoiPhuTrach');
 
-            // Attach listeners
             filtersContainer.querySelectorAll('select').forEach(el => el.addEventListener('change', applyFilters));
             document.getElementById('searchFilter').addEventListener('input', debouncedApplyFilters);
             document.getElementById('fromDateFilter').addEventListener('input', formatDateInput);
@@ -626,7 +627,6 @@
             
             input.value = formattedValue;
             
-            // --- UPDATED: Also trigger filter update ---
             if (input.id.includes('Filter')) {
                 debouncedApplyFilters();
             }
@@ -804,4 +804,5 @@
     </script>
 </body>
 </html>
+"
 
