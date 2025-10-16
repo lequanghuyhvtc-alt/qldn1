@@ -49,7 +49,6 @@
                 <p>Không thể tải các tài nguyên cần thiết. Vui lòng kiểm tra lại kết nối mạng và thử tải lại trang.</p>
             </div>
             
-            <!-- NEW: Connection Success Message -->
             <div id="connectionSuccess" class="text-green-700 bg-green-100 p-3 rounded-md mt-4 text-sm text-center" style="display: none;">
                 <p class="font-semibold">Đã kết nối thành công với máy chủ!</p>
             </div>
@@ -145,22 +144,25 @@
     </div>
 
     <script>
-    function handleScriptLoadError() {
-        document.getElementById('loginForm').style.display = 'none';
-        document.getElementById('toggleForm').parentElement.style.display = 'none';
-        document.getElementById('loginStatusContainer').style.display = 'none';
-        document.getElementById('networkError').style.display = 'block';
-    }
+    // --- UPDATED: Wrap all code in DOMContentLoaded listener ---
+    document.addEventListener('DOMContentLoaded', () => {
+        function handleScriptLoadError() {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('toggleForm').parentElement.style.display = 'none';
+            document.getElementById('loginStatusContainer').style.display = 'none';
+            document.getElementById('networkError').style.display = 'block';
+        }
 
-    if (typeof firebase === 'undefined') {
-        handleScriptLoadError();
-    } else {
-        // --- UPDATED: Show connection success message ---
+        if (typeof firebase === 'undefined') {
+            handleScriptLoadError();
+            return; // Stop execution if firebase is not loaded
+        }
+        
         const connectionSuccessEl = document.getElementById('connectionSuccess');
         connectionSuccessEl.style.display = 'block';
         setTimeout(() => {
             connectionSuccessEl.style.display = 'none';
-        }, 4000); // Hide after 4 seconds
+        }, 4000);
 
         const firebaseConfig = {
           apiKey: "AIzaSyDxteIBXiT92KbGy_5M0HKnkflgCiGn1-c",
@@ -626,7 +628,7 @@
                 event.target.value = '';
             }
         }
-    }
+    });
     </script>
 </body>
 </html>
