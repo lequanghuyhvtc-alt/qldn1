@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bảng Điều Hành Số - Quản Lý Công Việc (Firebase)</title>
+    <title>Số Tay Điện Tử Quản Lý Công Việc (Firebase)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
@@ -32,7 +32,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25 3h4.5M15 3.75l3 3m0 0l-3 3m3-3H9" />
             </svg>
 
-            <h1 class="text-2xl font-bold text-slate-800 mb-2 text-center">Bảng Điều Hành Số</h1>
+            <h1 class="text-2xl font-bold text-slate-800 mb-2 text-center">Số tay điện tử Quản lý công việc</h1>
             <p id="form-title" class="text-slate-500 mb-6 text-center">Đăng nhập để tiếp tục</p>
 
             <form id="loginForm">
@@ -83,8 +83,8 @@
                 </div>
                 <button id="logoutButton" class="ml-4 px-3 py-1.5 text-xs font-medium text-white bg-rose-500 rounded-md hover:bg-rose-600 transition-colors">Đăng xuất</button>
             </div>
-            <h1 class="text-3xl md:text-4xl font-bold text-slate-900">Bảng Điều Hành Số</h1>
-            <p class="text-slate-500 mt-2">Phục vụ Quản lý và Theo dõi tiến độ công việc</p>
+            <h1 class="text-3xl md:text-4xl font-bold text-slate-900">SỔ TAY ĐIỆN TỬ</h1>
+            <p class="text-slate-500 mt-2">Quản lý và Theo dõi tiến độ công việc</p>
         </header>
 
         <main id="mainContent">
@@ -198,7 +198,7 @@
         let statusChart, workloadChart, taskTypeStatusChart;
 
         const PREDEFINED_LISTS = {
-            'Trạng thái': ['Đang Thực Hiện', 'Đã Hoàn Thành', 'Chưa hoàn thành', 'Tạm hoãn', 'Đã hủy'],
+            'Trạng thái': ['Đang Thực Hiện', 'Đã Hoàn Thành', 'Đã Hủy'],
             'Loại công việc': [ 'Giải thể','Chuyển quận','Hoàn thuế GTGT', 'Quản lý nợ', 'Kiểm tra tại CQT', 'Hoàn thuế TNCN', 'Rủi ro Hóa đơn', 'Quản lý đối tượng'],
             'nguoiPhuTrach': [] 
         };
