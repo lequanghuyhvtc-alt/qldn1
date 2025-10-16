@@ -144,7 +144,6 @@
     </div>
 
     <script>
-    // --- UPDATED: Wrap all code in DOMContentLoaded listener ---
     document.addEventListener('DOMContentLoaded', () => {
         function handleScriptLoadError() {
             document.getElementById('loginForm').style.display = 'none';
@@ -155,7 +154,7 @@
 
         if (typeof firebase === 'undefined') {
             handleScriptLoadError();
-            return; // Stop execution if firebase is not loaded
+            return; 
         }
         
         const connectionSuccessEl = document.getElementById('connectionSuccess');
@@ -197,10 +196,6 @@
 
         const authContainer = document.getElementById('authContainer');
         const dashboardContainer = document.getElementById('dashboardContainer');
-        const loginForm = document.getElementById('loginForm');
-        const toggleForm = document.getElementById('toggleForm');
-        const formTitle = document.getElementById('form-title');
-        const nameInput = document.getElementById('nameInput');
         const loginStatusContainer = document.getElementById('loginStatusContainer');
         const loginStatusText = document.getElementById('loginStatusText');
         const authErrorEl = document.getElementById('authError');
@@ -210,6 +205,8 @@
         let isLogin = true;
 
         function updateLoginStatus(message, isError = false) {
+            const loginForm = document.getElementById('loginForm');
+            const toggleForm = document.getElementById('toggleForm');
             authErrorEl.style.display = 'none';
             if (message) {
                 if (isError) {
@@ -217,19 +214,76 @@
                     authErrorEl.style.display = 'block';
                     loginStatusContainer.classList.add('hidden');
                     loginForm.style.display = 'block';
-                    toggleForm.parentElement.style.display = 'block';
+                    if (toggleForm) toggleForm.parentElement.style.display = 'block';
                 } else {
                     loginStatusText.textContent = message + '...';
                     loginStatusContainer.classList.remove('hidden');
                     loginForm.style.display = 'none';
-                    toggleForm.parentElement.style.display = 'none';
+                    if (toggleForm) toggleForm.parentElement.style.display = 'none';
                 }
             } else {
                 loginStatusContainer.classList.add('hidden');
                 loginForm.style.display = 'block';
-                toggleForm.parentElement.style.display = 'block';
+                if (toggleForm) toggleForm.parentElement.style.display = 'block';
             }
         }
+
+        // --- NEW: Function to set up auth form listeners ---
+        function setupAuthFormListeners() {
+            const loginForm = document.getElementById('loginForm');
+            const toggleForm = document.getElementById('toggleForm');
+            const nameInput = document.getElementById('nameInput');
+            const formTitle = document.getElementById('form-title');
+
+            if (!loginForm) return; // defensive check
+
+            loginForm.onsubmit = (e) => {
+                e.preventDefault();
+                const email = document.getElementById('emailInput').value;
+                const password = document.getElementById('passwordInput').value;
+                
+                if (isLogin) {
+                    updateLoginStatus('Đang đăng nhập');
+                    auth.signInWithEmailAndPassword(email, password).catch(error => {
+                        updateLoginStatus("Sai email hoặc mật khẩu.", true);
+                    });
+                } else {
+                    const name = nameInput.value;
+                    if (!name) { 
+                        updateLoginStatus("Vui lòng nhập họ và tên.", true);
+                        return; 
+                    }
+                    updateLoginStatus('Đang tạo tài khoản');
+                    auth.createUserWithEmailAndPassword(email, password)
+                        .then(userCredential => {
+                            return db.collection("users").doc(userCredential.user.uid).set({
+                                name: name, email: email, role: 'pending' 
+                            });
+                        })
+                        .then(() => {
+                            alert("Đăng ký thành công! Tài khoản của bạn đang chờ quản trị viên phê duyệt.");
+                            auth.signOut();
+                        })
+                        .catch(error => {
+                            const message = error.code === 'auth/email-already-in-use' ? "Email này đã được sử dụng." : "Đã có lỗi xảy ra.";
+                            updateLoginStatus(message, true);
+                        });
+                }
+            };
+
+            if (!toggleForm) return;
+
+            toggleForm.onclick = (e) => {
+                e.preventDefault();
+                isLogin = !isLogin;
+                nameInput.classList.toggle('hidden', isLogin);
+                formTitle.textContent = isLogin ? 'Đăng nhập' : 'Tạo tài khoản mới';
+                loginForm.querySelector('button').textContent = isLogin ? 'Đăng nhập' : 'Đăng ký';
+                toggleForm.textContent = isLogin ? 'Chưa có tài khoản? Đăng ký' : 'Đã có tài khoản? Đăng nhập';
+                authErrorEl.style.display = 'none';
+            };
+        }
+
 
         auth.onAuthStateChanged(async (user) => {
             if (user) {
@@ -243,6 +297,8 @@
                 dashboardContainer.classList.add('hidden');
                 updateLoginStatus(''); 
                 sessionStorage.removeItem('welcomeShown');
+                // --- UPDATED: Re-attach listeners on logout ---
+                setupAuthFormListeners();
             }
         });
 
@@ -288,49 +344,7 @@
             }
         }
 
-        loginForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const email = document.getElementById('emailInput').value;
-            const password = document.getElementById('passwordInput').value;
-            
-            if (isLogin) {
-                updateLoginStatus('Đang đăng nhập');
-                auth.signInWithEmailAndPassword(email, password).catch(error => {
-                    updateLoginStatus("Sai email hoặc mật khẩu.", true);
-                });
-            } else {
-                const name = nameInput.value;
-                if (!name) { 
-                    updateLoginStatus("Vui lòng nhập họ và tên.", true);
-                    return; 
-                }
-                updateLoginStatus('Đang tạo tài khoản');
-                auth.createUserWithEmailAndPassword(email, password)
-                    .then(userCredential => {
-                        return db.collection("users").doc(userCredential.user.uid).set({
-                            name: name, email: email, role: 'pending' 
-                        });
-                    })
-                    .then(() => {
-                        alert("Đăng ký thành công! Tài khoản của bạn đang chờ quản trị viên phê duyệt.");
-                        auth.signOut();
-                    })
-                    .catch(error => {
-                        const message = error.code === 'auth/email-already-in-use' ? "Email này đã được sử dụng." : "Đã có lỗi xảy ra.";
-                        updateLoginStatus(message, true);
-                    });
-            }
-        });
-
-        toggleForm.addEventListener('click', (e) => {
-            e.preventDefault();
-            isLogin = !isLogin;
-            nameInput.classList.toggle('hidden', isLogin);
-            formTitle.textContent = isLogin ? 'Đăng nhập' : 'Tạo tài khoản mới';
-            loginForm.querySelector('button').textContent = isLogin ? 'Đăng nhập' : 'Đăng ký';
-            toggleForm.textContent = isLogin ? 'Chưa có tài khoản? Đăng ký' : 'Đã có tài khoản? Đăng nhập';
-            authErrorEl.style.display = 'none';
-        });
+        // --- REMOVED old listener attachments from here ---
 
         document.getElementById('logoutButton').addEventListener('click', () => auth.signOut());
 
@@ -628,6 +642,9 @@
                 event.target.value = '';
             }
         }
+        
+        // --- UPDATED: Initial call to set up listeners for the first time ---
+        setupAuthFormListeners();
     });
     </script>
 </body>
