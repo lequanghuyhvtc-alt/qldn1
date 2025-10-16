@@ -36,7 +36,8 @@
             <p id="form-title" class="text-slate-500 mb-6 text-center">Đăng nhập để tiếp tục</p>
 
             <form id="loginForm">
-                <input type="text" id="nameInput" class="w-full px-4 py-2 border rounded-lg mb-3 hidden" placeholder="Họ và Tên" required>
+                <!-- UPDATED: Removed 'required' attribute from here. It will be managed by JS. -->
+                <input type="text" id="nameInput" class="w-full px-4 py-2 border rounded-lg mb-3 hidden" placeholder="Họ và Tên">
                 <input type="email" id="emailInput" class="w-full px-4 py-2 border rounded-lg mb-3" placeholder="Email" required>
                 <input type="password" id="passwordInput" class="w-full px-4 py-2 border rounded-lg" placeholder="Mật khẩu" required>
                 <button type="submit" class="w-full mt-4 px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">Đăng nhập</button>
@@ -228,20 +229,20 @@
             }
         }
 
-        // --- NEW: Function to reset the Auth Form UI to its default state ---
         function resetAuthFormUI() {
             const loginForm = document.getElementById('loginForm');
             const toggleFormLink = document.getElementById('toggleForm');
             const nameInput = document.getElementById('nameInput');
             const formTitle = document.getElementById('form-title');
 
-            isLogin = true; // Reset state
+            isLogin = true; 
             nameInput.classList.add('hidden');
+            nameInput.required = false; // --- UPDATED: Ensure required is false on reset
             formTitle.textContent = 'Đăng nhập để tiếp tục';
             loginForm.querySelector('button').textContent = 'Đăng nhập';
             if(toggleFormLink) toggleFormLink.textContent = 'Chưa có tài khoản? Đăng ký';
             authErrorEl.style.display = 'none';
-            loginForm.reset(); // Clear input fields
+            loginForm.reset(); 
         }
 
         function setupAuthFormListeners() {
@@ -286,10 +287,10 @@
                 e.preventDefault();
                 isLogin = !isLogin;
                 
-                // Instead of calling a complex function, just toggle the UI elements directly
                 const nameInput = document.getElementById('nameInput');
                 const formTitle = document.getElementById('form-title');
                 nameInput.classList.toggle('hidden', isLogin);
+                nameInput.required = !isLogin; // --- UPDATED: Dynamically set required property
                 formTitle.textContent = isLogin ? 'Đăng nhập để tiếp tục' : 'Tạo tài khoản mới';
                 loginForm.querySelector('button').textContent = isLogin ? 'Đăng nhập' : 'Đăng ký';
                 toggleFormLink.textContent = isLogin ? 'Chưa có tài khoản? Đăng ký' : 'Đã có tài khoản? Đăng nhập';
@@ -310,7 +311,6 @@
                 dashboardContainer.classList.add('hidden');
                 updateLoginStatus(''); 
                 sessionStorage.removeItem('welcomeShown');
-                // --- UPDATED: Manually reset the form UI on logout ---
                 resetAuthFormUI();
             }
         });
