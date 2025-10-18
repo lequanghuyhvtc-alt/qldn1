@@ -182,6 +182,7 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
 
+        let allTasksDataForFilters = [];
         let allUsersData = [];
         let tasksData = [];
         let filteredTasks = [];
@@ -196,7 +197,7 @@
 
         const PREDEFINED_LISTS = {
             'Trạng thái': ['Đang Thực Hiện', 'Đã Hoàn Thành', 'Đã Hủy'],
-            'Loại công việc': [ 'Chuyển quận','Hoàn thuế GTGT', 'Quản lý nợ', 'Kiểm tra tại CQT', 'Hoàn thuế TNCN', 'Rủi ro Hóa đơn', 'Quản lý đối tượng'],
+            'Loại công việc': [ 'Giải thể','Chuyển quận','Hoàn thuế GTGT', 'Quản lý nợ', 'Kiểm tra tại CQT', 'Hoàn thuế TNCN', 'Rủi ro Hóa đơn', 'Quản lý đối tượng'],
             'nguoiPhuTrach': [] 
         };
 
@@ -330,6 +331,7 @@
             } else {
                 currentUserProfile = null;
                 tasksData = [];
+                allTasksDataForFilters = [];
                 filteredTasks = [];
                 lastVisibleTask = null;
                 allUsersData = [];
@@ -357,6 +359,11 @@
 
                 document.getElementById('userName').textContent = currentUserProfile.name;
                 
+                // Fetch all tasks for filter population regardless of role
+                updateLoginStatus('Đang tải dữ liệu bộ lọc');
+                const allTasksSnapshot = await db.collection("tasks").get();
+                allTasksDataForFilters = allTasksSnapshot.docs.map(doc => doc.data());
+
                 if (currentUserProfile.role === 'leader') {
                     updateLoginStatus('Đang tải danh sách người dùng');
                     const usersSnapshot = await db.collection("users").get();
@@ -481,6 +488,11 @@
                     const newTask = { id: docRef.id, ...taskData };
                     tasksData.unshift(newTask);
                 }
+                
+                // Refresh filter data in case a new task type was added
+                const allTasksSnapshot = await db.collection("tasks").get();
+                allTasksDataForFilters = allTasksSnapshot.docs.map(doc => doc.data());
+                
                 applyFilters();
                 closeTaskModal();
                 showNotification(taskId ? "Cập nhật công việc thành công!" : "Thêm công việc thành công!");
@@ -497,6 +509,7 @@
             try {
                 await db.collection("tasks").doc(taskId).delete();
                 tasksData = tasksData.filter(t => t.id !== taskId);
+                allTasksDataForFilters = allTasksDataForFilters.filter(t => t.id !== taskId);
                 applyFilters();
                 closeTaskModal();
                 showNotification("Xóa công việc thành công!");
@@ -519,7 +532,6 @@
             const filtersContainer = document.getElementById('filters');
             filtersContainer.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"><div><label class="block text-sm font-medium text-slate-600 mb-1">Loại công việc</label><select id="taskTypeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Người phụ trách</label><select id="assigneeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Trạng thái</label><select id="statusFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Đã Hoàn Thành">Đã Hoàn Thành</option><option value="Đang Thực Hiện">Đang Thực Hiện</option></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Cảnh Báo</label><select id="warningFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Quá Hạn">Quá Hạn</option><option value="Sắp đến hạn">Sắp đến hạn</option><option value="Không có">Không có</option></select></div></div><div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div><label for="fromDateFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Từ)</label><input type="text" id="fromDateFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg"></div><div><label for="toDateFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Đến)</label><input type="text" id="toDateFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg"></div><div class="md:col-span-1"><label class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm (MST/Nội dung)</label><input type="text" id="searchFilter" placeholder="Nhập từ khóa..." class="w-full p-2 border rounded-lg"></div><div class="md:col-span-1"><label class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm theo ID</label><input type="text" id="searchIdFilter" placeholder="Nhập ID công việc..." class="w-full p-2 border rounded-lg"></div></div>`;
             
-            // Initial empty population, will be filled by applyFilters
             document.getElementById('taskTypeFilter').innerHTML = '<option value="all">Tất cả</option>';
             document.getElementById('assigneeFilter').innerHTML = '<option value="all">Tất cả</option>';
 
@@ -573,17 +585,15 @@
         }
 
         function applyFilters() {
-            // Update assignee filter options
-            const uniqueAssignees = [...new Set(tasksData.map(task => task.nguoiPhuTrach))].filter(Boolean).sort();
+            const uniqueAssignees = [...new Set(allTasksDataForFilters.map(task => task.nguoiPhuTrach))].filter(Boolean).sort();
             const assigneeFilterEl = document.getElementById('assigneeFilter');
             const currentAssignee = assigneeFilterEl.value;
             assigneeFilterEl.innerHTML = '<option value="all">Tất cả</option>';
             uniqueAssignees.forEach(val => assigneeFilterEl.innerHTML += `<option value="${val}">${val}</option>`);
             if (uniqueAssignees.includes(currentAssignee)) assigneeFilterEl.value = currentAssignee;
             
-            // Update task type filter options
             const predefinedTypes = PREDEFINED_LISTS['Loại công việc'] || [];
-            const dynamicTypes = tasksData.map(task => task['Loại công việc']).filter(Boolean);
+            const dynamicTypes = allTasksDataForFilters.map(task => task['Loại công việc']).filter(Boolean);
             const allTypes = [...new Set([...predefinedTypes, ...dynamicTypes])].sort();
             const taskTypeFilterEl = document.getElementById('taskTypeFilter');
             const currentTaskType = taskTypeFilterEl.value;
@@ -591,7 +601,6 @@
             allTypes.forEach(val => taskTypeFilterEl.innerHTML += `<option value="${val}">${val}</option>`);
             if(allTypes.includes(currentTaskType)) taskTypeFilterEl.value = currentTaskType;
 
-            // Read filter values
             const type = document.getElementById('taskTypeFilter').value;
             const assignee = document.getElementById('assigneeFilter').value;
             const coreStatus = document.getElementById('statusFilter').value;
@@ -604,7 +613,9 @@
             const fromDate = parseDate(fromDateStr);
             const toDate = parseDate(toDateStr);
             
-            filteredTasks = tasksData.filter(task => {
+            let tasksToFilter = (currentUserProfile.role === 'member') ? tasksData : allTasksDataForFilters;
+
+            filteredTasks = tasksToFilter.filter(task => {
                 const warningInfo = getWarningStatus(task);
                 const typeMatch = type === 'all' || task['Loại công việc'] === type;
                 const assigneeMatch = assignee === 'all' || task['nguoiPhuTrach'] === assignee;
@@ -627,6 +638,14 @@
 
                 return typeMatch && assigneeMatch && searchMatch && coreStatusMatch && warningMatch && dateMatch && idMatch;
             });
+
+            if (currentUserProfile.role === 'leader' && !assignee) {
+                 loadMoreContainer.classList.remove('hidden');
+            } else if (currentUserProfile.role === 'member') {
+                loadMoreContainer.classList.add('hidden');
+            }
+
+
             currentPage = 1;
             renderTable(filteredTasks);
             renderPaginationControls();
@@ -639,11 +658,9 @@
             const formContainer = form.querySelector('div.grid');
             formContainer.innerHTML = '';
             
-            const allTaskTypes = [...new Set([...(PREDEFINED_LISTS['Loại công việc'] || []), ...(tasksData.map(t => t['Loại công việc']).filter(Boolean))])].sort();
+            const allTaskTypes = [...new Set([...(PREDEFINED_LISTS['Loại công việc'] || []), ...(allTasksDataForFilters.map(t => t['Loại công việc']).filter(Boolean))])].sort();
             
             TASK_FIELDS.forEach(field => {
-                // For a new task, if the user is a member, default 'nguoiPhuTrach' to their name.
-                // For an existing task, use the value from the task object.
                 const value = task ? task[field] : (field === 'nguoiPhuTrach' && currentUserProfile.role === 'member' ? currentUserProfile.name : '');
 
                 const div = document.createElement('div');
@@ -651,29 +668,23 @@
                 if (displayName.includes('NỘI DUNG') || displayName.includes('Ghi chú')) div.className = 'md:col-span-2';
                 let inputHtml;
 
-                // Get the list of options for dropdowns.
-                const allAssignees = [...new Set(tasksData.map(t => t.nguoiPhuTrach))].filter(Boolean).sort();
+                const allAssignees = [...new Set(allTasksDataForFilters.map(t => t.nguoiPhuTrach))].filter(Boolean).sort();
                 let currentList;
                 if (field === 'Loại công việc') {
                     currentList = allTaskTypes;
                 } else if (field === 'nguoiPhuTrach') {
-                    // This list will be used for leaders.
                     currentList = allAssignees;
                 } else {
                     currentList = PREDEFINED_LISTS[field];
                 }
 
-                // If the current user is a member and the field is 'nguoiPhuTrach',
-                // create a read-only input instead of a dropdown.
                 if (field === 'nguoiPhuTrach' && currentUserProfile.role === 'member') {
                     inputHtml = `<input type="text" id="field-${field}" value="${value || ''}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2 bg-slate-100" readonly>`;
                 }
-                // For all other cases that have a list (dropdowns)
                 else if (currentList) {
                     const options = currentList.map(opt => `<option value="${opt}" ${opt === value ? 'selected' : ''}>${opt}</option>`).join('');
                     inputHtml = `<select id="field-${field}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2">${options}</select>`;
                 } 
-                // For regular text inputs
                 else {
                     const isDate = displayName.includes('Ngày') || displayName.includes('Hạn');
                     inputHtml = `<input type="text" id="field-${field}" value="${value || ''}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2" ${isDate ? 'placeholder="dd/mm/yyyy"' : ''}>`;
@@ -736,7 +747,7 @@
             const statusCounts = ALL_STATUSES.reduce((a, s) => ({...a, [s]: 0}), {});
             data.forEach(t => { const s = getOverallStatus(t); if (s in statusCounts) statusCounts[s]++; });
             statusChart = new Chart('statusChart', { type: 'doughnut', data: { labels: ALL_STATUSES, datasets: [{ data: ALL_STATUSES.map(s => statusCounts[s]), backgroundColor: ALL_STATUSES.map(s => CORE_STATUSES[s]) }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }, datalabels: DATALABELS_CONFIG } } });
-            const assignees = [...new Set(tasksData.map(t => t.nguoiPhuTrach))].filter(Boolean).sort();
+            const assignees = [...new Set(allTasksDataForFilters.map(t => t.nguoiPhuTrach))].filter(Boolean).sort();
             workloadChart = new Chart('workloadChart', { type: 'bar', data: { labels: assignees, datasets: ALL_STATUSES.map(s => ({ label: s, data: assignees.map(a => data.filter(t => t['nguoiPhuTrach'] === a && getOverallStatus(t) === s).length), backgroundColor: CORE_STATUSES[s] })) }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } }, plugins: { legend: { position: 'bottom' }, datalabels: DATALABELS_CONFIG } } });
             const taskTypes = [...new Set(data.map(t => t['Loại công việc']))].filter(Boolean);
             taskTypeStatusChart = new Chart('taskTypeStatusChart', { type: 'bar', data: { labels: taskTypes, datasets: ALL_STATUSES.map(s => ({ label: s, data: taskTypes.map(type => data.filter(t => t['Loại công việc'] === type && getOverallStatus(t) === s).length), backgroundColor: CORE_STATUSES[s] })) }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } }, plugins: { legend: { position: 'bottom' }, datalabels: DATALABELS_CONFIG } } });
@@ -800,7 +811,10 @@
                     batch.set(docRef, newTask);
                 });
                 await batch.commit();
+                
                 tasksData.unshift(...newTasksForLocal);
+                allTasksDataForFilters.unshift(...newTasksForLocal);
+
                 applyFilters();
                 showNotification(`Đã nhập thành công ${jsonData.length} công việc!`);
             } catch (error) {
