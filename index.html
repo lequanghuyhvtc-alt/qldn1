@@ -13,7 +13,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
-        import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, query, where, orderBy, limit, startAfter, endBefore, limitToLast, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+        import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, query, where, orderBy, limit, startAfter, endBefore, limitToLast, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
         import { getStorage } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-storage.js";
 
         // --- BẮT ĐẦU: KHỞI TẠO FIREBASE (SỬ DỤNG API v9) ---
@@ -36,7 +36,7 @@
             collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc,
             query, where, orderBy, limit, startAfter, endBefore, limitToLast,
             serverTimestamp, onAuthStateChanged, signInWithEmailAndPassword,
-            createUserWithEmailAndPassword, signOut
+            createUserWithEmailAndPassword, signOut, writeBatch
         };
     </script>
     
@@ -193,7 +193,7 @@
     <script type="module">
     document.addEventListener('DOMContentLoaded', () => {
         // --- CÁC BIẾN TOÀN CỤC VÀ CÀI ĐẶT ---
-        const { auth, db, collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, query, where, orderBy, limit, startAfter, endBefore, limitToLast, serverTimestamp, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = window.firebase;
+        const { auth, db, collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, query, where, orderBy, limit, startAfter, endBefore, limitToLast, serverTimestamp, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, writeBatch } = window.firebase;
         
         let allUsersData = [];
         let currentUserProfile = null;
@@ -782,7 +782,70 @@
             XLSX.writeFile(workbook, `Xuat_Cong_Viec_${new Date().toISOString().slice(0,10)}.xlsx`);
             showNotification("Kết xuất file Excel thành công!");
         }
-        async function importFromExcel(event) { /* ... */ }
+        async function importFromExcel(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            try {
+                showNotification("Đang đọc file Excel...");
+                const data = await file.arrayBuffer();
+                const workbook = XLSX.read(data);
+                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+
+                if (jsonData.length === 0) {
+                    showNotification("File Excel rỗng hoặc không có dữ liệu.", true);
+                    return;
+                }
+
+                const headers = Object.keys(jsonData[0]);
+                const displayHeaders = TASK_FIELDS.map(f => (f === 'nguoiPhuTrach' ? 'Người phụ trách' : f));
+                const missingHeaders = displayHeaders.filter(f => !headers.includes(f));
+
+                if (missingHeaders.length > 0) {
+                    alert(`File Excel thiếu các cột sau: ${missingHeaders.join(', ')}`);
+                    return;
+                }
+
+                showNotification(`Đã tìm thấy ${jsonData.length} công việc. Bắt đầu nhập...`);
+                const batch = writeBatch(db);
+                
+                jsonData.forEach(row => {
+                    const newTask = {};
+                    TASK_FIELDS.forEach(field => {
+                        const displayName = (field === 'nguoiPhuTrach' ? 'Người phụ trách' : field);
+                        // Xử lý trường hợp Excel lưu ngày tháng dưới dạng số
+                        if ((field === 'Ngày giao' || field === 'Hạn xử lý') && typeof row[displayName] === 'number') {
+                            const jsDate = new Date(Math.round((row[displayName] - 25569) * 86400 * 1000));
+                            const day = String(jsDate.getDate()).padStart(2, '0');
+                            const month = String(jsDate.getMonth() + 1).padStart(2, '0');
+                            const year = jsDate.getFullYear();
+                            newTask[field] = `${day}/${month}/${year}`;
+                        } else {
+                            newTask[field] = row[displayName] || '';
+                        }
+                    });
+                    
+                    newTask.createdBy = auth.currentUser.email;
+                    newTask.modifiedBy = auth.currentUser.email;
+                    newTask.createdAt = serverTimestamp();
+                    newTask.lastModified = serverTimestamp();
+
+                    const docRef = doc(collection(db, "tasks"));
+                    batch.set(docRef, newTask);
+                });
+
+                await batch.commit();
+                await fetchAndRenderTasks('initial');
+                showNotification(`Đã nhập thành công ${jsonData.length} công việc!`);
+
+            } catch (error) {
+                console.error("Lỗi khi nhập từ Excel:", error);
+                showNotification("Có lỗi xảy ra khi nhập file.", true);
+            } finally {
+                event.target.value = '';
+            }
+        }
 
         setupAuthFormListeners();
     });
