@@ -96,7 +96,6 @@
             <section class="mb-6 section-card">
                  <div class="flex flex-wrap justify-between items-center mb-4">
                     <h2 class="text-xl font-semibold text-slate-700">Bộ lọc và Tìm kiếm</h2>
-                    <!-- --- CHANGE START: Added Export Button --- -->
                     <div class="flex items-center space-x-2">
                         <button id="downloadTemplateButton" class="px-4 py-2 text-sm bg-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-300 transition-colors">Tải file mẫu</button>
                         <input type="file" id="importExcelInput" class="hidden" accept=".xlsx, .xls">
@@ -104,7 +103,6 @@
                         <button id="exportExcelButton" class="px-4 py-2 text-sm bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors">Kết xuất Excel</button>
                         <button id="addTaskButton" class="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">+ Thêm Công Việc Mới</button>
                     </div>
-                    <!-- --- CHANGE END --- -->
                 </div>
                 <div id="filters" class="space-y-4"></div>
             </section>
@@ -200,7 +198,7 @@
 
         const PREDEFINED_LISTS = {
             'Trạng thái': ['Đang Thực Hiện', 'Đã Hoàn Thành', 'Đã Hủy'],
-            'Loại công việc': [ 'Giải thể - Đơn giản','Giải thể - Chuyển Tổ KT', 'Chuyển quận','Hoàn thuế GTGT', 'Quản lý nợ', 'Kiểm tra tại CQT', 'Hoàn thuế TNCN', 'Rủi ro Hóa đơn', 'Quản lý đối tượng'],
+              'Loại công việc': [ 'Giải thể - Đơn giản','Giải thể - Chuyển Tổ KT', 'Chuyển quận','Hoàn thuế GTGT', 'Quản lý nợ', 'Kiểm tra tại CQT', 'Hoàn thuế TNCN', 'Rủi ro Hóa đơn', 'Quản lý đối tượng'],
             'nguoiPhuTrach': [] 
         };
 
@@ -393,7 +391,6 @@
 
         document.getElementById('logoutButton').addEventListener('click', () => auth.signOut());
 
-        // --- CHANGE START: Added event listener for Export button ---
         function initializeApp() {
             document.getElementById('addTaskButton').onclick = () => openTaskModal();
             document.getElementById('taskForm').onsubmit = saveTask;
@@ -412,7 +409,6 @@
             
             return fetchMoreTasks(true);
         }
-        // --- CHANGE END ---
 
         function fetchMoreTasks(isInitial = false) {
             let tasksQuery = db.collection("tasks");
@@ -775,14 +771,12 @@
         
         function downloadTemplate() { const displayHeaders = TASK_FIELDS.map(f => f === 'nguoiPhuTrach' ? 'Người phụ trách' : f); const worksheet = XLSX.utils.aoa_to_sheet([displayHeaders]); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, worksheet, 'Tasks'); XLSX.writeFile(workbook, "Mau_Nhap_Cong_Viec.xlsx"); }
         
-        // --- CHANGE START: New function to export filtered data ---
         function exportToExcel() {
             if (filteredTasks.length === 0) {
                 showNotification("Không có dữ liệu nào để kết xuất.", true);
                 return;
             }
 
-            // Define the headers for the Excel file, matching the table display
             const headers = [
                 'ID', 
                 ...TASK_FIELDS.map(h => h === 'nguoiPhuTrach' ? 'Người phụ trách' : h), 
@@ -790,7 +784,6 @@
                 'Cảnh Báo'
             ];
 
-            // Map the filtered task data to rows for the Excel sheet
             const dataRows = filteredTasks.map(task => {
                 const warningInfo = getWarningStatus(task);
                 return [
@@ -801,13 +794,11 @@
                 ];
             });
 
-            // Create the worksheet and workbook using SheetJS
             const worksheetData = [headers, ...dataRows];
             const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, 'Danh sách công việc');
 
-            // Generate a dynamic filename and trigger the download
             const today = new Date();
             const dateString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
             const fileName = `Danh_Sach_Cong_Viec_${dateString}.xlsx`;
@@ -815,7 +806,6 @@
 
             showNotification("Kết xuất file Excel thành công!");
         }
-        // --- CHANGE END ---
 
         async function importFromExcel(event) {
             const file = event.target.files[0];
@@ -834,7 +824,12 @@
                 const newTasksForLocal = [];
                 jsonData.forEach(row => {
                     const newTask = {};
-                    TASK_FIELDS.forEach(field => { const displayName = field === 'nguoiPhuTrach' ? 'Người phụ trách' : f; newTask[field] = row[displayName] || ''; });
+                    TASK_FIELDS.forEach(field => { 
+                        // --- CHANGE START: Fixed the bug where 'f' was used instead of 'field' ---
+                        const displayName = field === 'nguoiPhuTrach' ? 'Người phụ trách' : field; 
+                        // --- CHANGE END ---
+                        newTask[field] = row[displayName] || ''; 
+                    });
                     newTask.createdBy = auth.currentUser.email;
                     newTask.createdAt = new Date();
                     newTask.lastModified = new Date();
