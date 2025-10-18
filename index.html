@@ -152,7 +152,6 @@
                  </div>
                  <div class="table-responsive"><table class="w-full text-sm text-left text-slate-600"><thead class="text-xs text-slate-700 uppercase bg-slate-50"><tr id="tasksTableHeader"></tr></thead><tbody id="tasksTableBody"></tbody></table></div>
                  <div id="no-results" class="text-center py-8 text-slate-500 hidden"><p>Không tìm thấy công việc nào phù hợp.</p></div>
-                 <!-- THAY ĐỔI: Thay thế nút "Tải thêm" bằng điều khiển phân trang -->
                  <div id="paginationControls" class="flex justify-between items-center mt-4 pt-4 border-t border-slate-200"></div>
             </section>
         </main>
@@ -200,10 +199,9 @@
         let currentUserProfile = null;
         let isLogin = true;
 
-        // Cài đặt cho phân trang server-side
-        const PAGE_SIZE = 20; // Số lượng công việc mỗi trang
-        let lastVisibleDoc = null; // Document cuối cùng của trang hiện tại
-        let firstVisibleDoc = null; // Document đầu tiên của trang hiện tại
+        const PAGE_SIZE = 20; 
+        let lastVisibleDoc = null; 
+        let firstVisibleDoc = null;
         let currentPage = 1;
 
         const TASK_FIELDS = ['Loại công việc', 'MST', 'Tên NNT', 'nguoiPhuTrach', 'Ngày giao', 'Hạn xử lý', 'Trạng thái', 'Ghi chú'];
@@ -282,7 +280,24 @@
             await fetchAndRenderTasks('initial'); 
         }
 
-        // --- HÀM TẢI VÀ HIỂN THỊ DỮ LIỆU ---
+        // --- HÀM TẢI DỮ LIỆU ---
+        
+        // HÀM MỚI: Tải dữ liệu cho biểu đồ và KPI
+        async function updateAnalytics(filterConstraints) {
+            try {
+                const analyticsQuery = query(collection(db, "tasks"), ...filterConstraints);
+                const snapshot = await getDocs(analyticsQuery);
+                const allFilteredTasks = snapshot.docs.map(d => ({ id: d.id, ...d.data()}));
+                
+                // Cập nhật KPI và biểu đồ với toàn bộ dữ liệu đã lọc
+                updateKPIs(allFilteredTasks);
+                updateCharts(allFilteredTasks);
+            } catch (error) {
+                console.error("Lỗi khi cập nhật phân tích:", error);
+                showNotification("Không thể tải dữ liệu cho biểu đồ.", true);
+            }
+        }
+
         async function fetchAndRenderTasks(direction) {
             document.getElementById('table-loader').classList.remove('hidden');
             document.getElementById('tasksTableBody').innerHTML = '';
@@ -290,28 +305,35 @@
             
             try {
                 const queryConstraints = []; 
+                const baseConstraints = []; // Giữ các bộ lọc cơ bản để dùng cho analytics
 
-                // Lọc theo vai trò trước khi áp dụng các bộ lọc khác
                 if (currentUserProfile && currentUserProfile.role === 'member') {
-                    queryConstraints.push(where("nguoiPhuTrach", "==", currentUserProfile.name));
+                    baseConstraints.push(where("nguoiPhuTrach", "==", currentUserProfile.name));
                 }
 
                 const type = document.getElementById('taskTypeFilter').value;
                 const assignee = document.getElementById('assigneeFilter').value;
                 const coreStatus = document.getElementById('statusFilter').value;
                 
-                if (type !== 'all') queryConstraints.push(where('Loại công việc', '==', type));
-                if (assignee !== 'all') queryConstraints.push(where('nguoiPhuTrach', '==', assignee));
+                if (type !== 'all') baseConstraints.push(where('Loại công việc', '==', type));
+                if (assignee !== 'all') baseConstraints.push(where('nguoiPhuTrach', '==', assignee));
                 if (coreStatus !== 'all') {
                     if (coreStatus === 'Đang Thực Hiện') {
-                       queryConstraints.push(where('Trạng thái', 'in', ['Đang Thực Hiện', 'Đã Hủy']));
+                       baseConstraints.push(where('Trạng thái', 'in', ['Đang Thực Hiện', 'Đã Hủy']));
                     } else {
-                       queryConstraints.push(where('Trạng thái', '==', coreStatus));
+                       baseConstraints.push(where('Trạng thái', '==', coreStatus));
                     }
                 }
-                
+
+                queryConstraints.push(...baseConstraints);
                 queryConstraints.push(orderBy("createdAt", "desc"));
 
+                // Cập nhật analytics chỉ khi filter thay đổi (trang đầu tiên)
+                if (direction === 'initial') {
+                    await updateAnalytics(baseConstraints);
+                }
+                
+                // Áp dụng phân trang cho query chính
                 if (direction === 'next' && lastVisibleDoc) {
                     queryConstraints.push(startAfter(lastVisibleDoc));
                     currentPage++;
@@ -333,7 +355,6 @@
                 
                 const finalQuery = query(collection(db, "tasks"), ...queryConstraints, limit(PAGE_SIZE));
                 const snapshot = await getDocs(finalQuery);
-
                 const tasks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 
                 firstVisibleDoc = snapshot.docs[0] || null;
@@ -342,14 +363,9 @@
                 renderClientSideFiltered(tasks);
                 renderPaginationControls(snapshot.size);
 
-                if (direction === 'initial') {
-                    updateKPIs(tasks);
-                    updateCharts(tasks);
-                }
-
             } catch (error) {
                 console.error("Lỗi khi tải công việc: ", error);
-                showNotification("Lỗi khi tải công việc. Có thể bạn cần tạo chỉ mục (index) trong Firestore. Xem console (F12) để biết chi tiết.", true);
+                showNotification("Lỗi khi tải công việc. Có thể bạn cần tạo chỉ mục (index) trong Firestore. Xem console (F12).", true);
                 document.getElementById('no-results').innerHTML = `<p class="text-red-500">Đã xảy ra lỗi. Vui lòng kiểm tra console (F12).</p><p class="text-xs text-slate-400 mt-2">${error.message}</p>`;
                 document.getElementById('no-results').classList.remove('hidden');
             } finally {
@@ -418,14 +434,21 @@
             filtersContainer.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"><div><label class="block text-sm font-medium text-slate-600 mb-1">Loại công việc</label><select id="taskTypeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Người phụ trách</label><select id="assigneeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Trạng thái</label><select id="statusFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Đã Hoàn Thành">Đã Hoàn Thành</option><option value="Đang Thực Hiện">Đang Thực Hiện</option></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Cảnh Báo</label><select id="warningFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Quá Hạn">Quá Hạn</option><option value="Sắp đến hạn">Sắp đến hạn</option><option value="Không có">Không có</option></select></div></div><div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div><label for="searchMstFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm MST</label><input type="text" id="searchMstFilter" placeholder="Nhập MST..." class="w-full p-2 border rounded-lg"></div><div><label for="searchNntFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm Tên NNT</label><input type="text" id="searchNntFilter" placeholder="Nhập tên NNT..." class="w-full p-2 border rounded-lg"></div><div><label for="searchIdFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm theo ID</label><input type="text" id="searchIdFilter" placeholder="Nhập ID công việc..." class="w-full p-2 border rounded-lg"></div></div>`;
             
             showNotification("Đang tải tùy chọn bộ lọc...");
-            const tasksSnapshot = await getDocs(query(collection(db, "tasks")));
+            
+            // SỬA LỖI: member không có quyền đọc toàn bộ collection
+            let filterPopulationQuery;
+            if (currentUserProfile && currentUserProfile.role === 'member') {
+                filterPopulationQuery = query(collection(db, "tasks"), where("nguoiPhuTrach", "==", currentUserProfile.name));
+            } else {
+                filterPopulationQuery = query(collection(db, "tasks"));
+            }
+            const tasksSnapshot = await getDocs(filterPopulationQuery);
             const allTasksData = tasksSnapshot.docs.map(d => d.data());
 
             const uniqueAssignees = [...new Set(allTasksData.map(task => task.nguoiPhuTrach).filter(Boolean))].sort();
             const assigneeFilterEl = document.getElementById('assigneeFilter');
             assigneeFilterEl.innerHTML = '<option value="all">Tất cả</option>' + uniqueAssignees.map(o => `<option value="${o}">${o}</option>`).join('');
 
-            // SỬA LẠI: Mặc định chọn tên user hiện tại nếu không phải leader
             if (currentUserProfile && currentUserProfile.role !== 'leader') {
                 assigneeFilterEl.value = currentUserProfile.name;
             }
@@ -497,7 +520,7 @@
             }
         }
 
-        // --- KHÔI PHỤC CÁC HÀM ADMIN ---
+        // --- ADMIN FUNCTIONS ---
         function renderAdminSection() {
             const adminSection = document.getElementById('adminSection');
             const pendingList = document.getElementById('pendingUsersList');
@@ -606,7 +629,9 @@
         }
         function getOverallStatus(task) { if (task['Trạng thái'] === 'Đã Hoàn Thành') return 'Đã Hoàn Thành'; const warning = getWarningStatus(task); return warning.label || 'Đang Thực Hiện'; }
 
-        function updateKPIs(data) { document.getElementById('kpis').innerHTML = `<div class="kpi-card section-card border-t-4 border-blue-500"><p class="text-sm text-slate-500">Tổng CV (trang này)</p><p class="text-2xl font-bold">${data.length}</p></div><div class="kpi-card section-card border-t-4 border-green-500"><p class="text-sm text-slate-500">Hoàn thành</p><p class="text-2xl font-bold text-green-600">${data.filter(t=>t['Trạng thái']==='Đã Hoàn Thành').length}</p></div><div class="kpi-card section-card border-t-4 border-red-500"><p class="text-sm text-slate-500">Quá hạn</p><p class="text-2xl font-bold text-red-600">${data.filter(t=>getWarningStatus(t).label==='Quá Hạn').length}</p></div><div class="kpi-card section-card border-t-4 border-yellow-500"><p class="text-sm text-slate-500">Sắp đến hạn</p><p class="text-2xl font-bold text-yellow-600">${data.filter(t=>getWarningStatus(t).label==='Sắp đến hạn').length}</p></div>`; }
+        function updateKPIs(data) { 
+            document.getElementById('kpis').innerHTML = `<div class="kpi-card section-card border-t-4 border-blue-500"><p class="text-sm text-slate-500">Tổng CV theo bộ lọc</p><p class="text-2xl font-bold">${data.length}</p></div><div class="kpi-card section-card border-t-4 border-green-500"><p class="text-sm text-slate-500">Hoàn thành</p><p class="text-2xl font-bold text-green-600">${data.filter(t=>t['Trạng thái']==='Đã Hoàn Thành').length}</p></div><div class="kpi-card section-card border-t-4 border-red-500"><p class="text-sm text-slate-500">Quá hạn</p><p class="text-2xl font-bold text-red-600">${data.filter(t=>getWarningStatus(t).label==='Quá Hạn').length}</p></div><div class="kpi-card section-card border-t-4 border-yellow-500"><p class="text-sm text-slate-500">Sắp đến hạn</p><p class="text-2xl font-bold text-yellow-600">${data.filter(t=>getWarningStatus(t).label==='Sắp đến hạn').length}</p></div>`; 
+        }
         function updateCharts(data) {
             const chartsContainer = document.getElementById('charts');
             chartsContainer.innerHTML = `<div class="section-card"><h3 class="text-lg font-semibold text-center mb-4 text-slate-700">Tỷ lệ Trạng thái</h3><div class="chart-container"><canvas id="statusChart"></canvas></div></div><div class="section-card"><h3 class="text-lg font-semibold text-center mb-4 text-slate-700">Khối lượng Công việc</h3><div class="chart-container"><canvas id="workloadChart"></canvas></div></div><div class="section-card md:col-span-2 lg:col-span-1"><h3 class="text-lg font-semibold text-center mb-4 text-slate-700">Tình trạng theo Loại CV</h3><div class="chart-container"><canvas id="taskTypeStatusChart"></canvas></div></div>`;
