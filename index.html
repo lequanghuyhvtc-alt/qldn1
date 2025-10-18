@@ -96,12 +96,15 @@
             <section class="mb-6 section-card">
                  <div class="flex flex-wrap justify-between items-center mb-4">
                     <h2 class="text-xl font-semibold text-slate-700">Bộ lọc và Tìm kiếm</h2>
+                    <!-- --- CHANGE START: Added Export Button --- -->
                     <div class="flex items-center space-x-2">
                         <button id="downloadTemplateButton" class="px-4 py-2 text-sm bg-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-300 transition-colors">Tải file mẫu</button>
                         <input type="file" id="importExcelInput" class="hidden" accept=".xlsx, .xls">
                         <button id="importExcelButton" class="px-4 py-2 text-sm bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition-colors">Nhập từ Excel</button>
+                        <button id="exportExcelButton" class="px-4 py-2 text-sm bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors">Kết xuất Excel</button>
                         <button id="addTaskButton" class="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">+ Thêm Công Việc Mới</button>
                     </div>
+                    <!-- --- CHANGE END --- -->
                 </div>
                 <div id="filters" class="space-y-4"></div>
             </section>
@@ -191,7 +194,8 @@
         const CLIENT_SIDE_ROWS_PER_PAGE = 20; 
         const SERVER_SIDE_PAGE_SIZE = 50; 
         
-        const TASK_FIELDS = ['Loại công việc', 'MST/NỘI DUNG', 'nguoiPhuTrach', 'Ngày giao', 'Hạn xử lý', 'Trạng thái', 'Ghi chú'];
+        const TASK_FIELDS = ['Loại công việc', 'MST', 'Tên NNT', 'nguoiPhuTrach', 'Ngày giao', 'Hạn xử lý', 'Trạng thái', 'Ghi chú'];
+        
         let statusChart, workloadChart, taskTypeStatusChart;
 
         const PREDEFINED_LISTS = {
@@ -389,12 +393,14 @@
 
         document.getElementById('logoutButton').addEventListener('click', () => auth.signOut());
 
+        // --- CHANGE START: Added event listener for Export button ---
         function initializeApp() {
             document.getElementById('addTaskButton').onclick = () => openTaskModal();
             document.getElementById('taskForm').onsubmit = saveTask;
             document.getElementById('downloadTemplateButton').onclick = downloadTemplate;
             document.getElementById('importExcelButton').onclick = () => document.getElementById('importExcelInput').click();
             document.getElementById('importExcelInput').onchange = importFromExcel;
+            document.getElementById('exportExcelButton').onclick = exportToExcel;
             loadMoreButton.onclick = fetchMoreTasks;
             document.getElementById('closeWelcomeButton').addEventListener('click', closeWelcomeModal);
             document.getElementById('cancelTaskButton').addEventListener('click', closeTaskModal);
@@ -406,6 +412,7 @@
             
             return fetchMoreTasks(true);
         }
+        // --- CHANGE END ---
 
         function fetchMoreTasks(isInitial = false) {
             let tasksQuery = db.collection("tasks");
@@ -517,14 +524,14 @@
 
         function populateFilters() {
             const filtersContainer = document.getElementById('filters');
-            filtersContainer.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"><div><label class="block text-sm font-medium text-slate-600 mb-1">Loại công việc</label><select id="taskTypeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Người phụ trách</label><select id="assigneeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Trạng thái</label><select id="statusFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Đã Hoàn Thành">Đã Hoàn Thành</option><option value="Đang Thực Hiện">Đang Thực Hiện</option></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Cảnh Báo</label><select id="warningFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Quá Hạn">Quá Hạn</option><option value="Sắp đến hạn">Sắp đến hạn</option><option value="Không có">Không có</option></select></div></div><div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div><label for="fromDateFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Từ)</label><input type="text" id="fromDateFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg"></div><div><label for="toDateFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Đến)</label><input type="text" id="toDateFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg"></div><div class="md:col-span-1"><label class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm (MST/Nội dung)</label><input type="text" id="searchFilter" placeholder="Nhập từ khóa..." class="w-full p-2 border rounded-lg"></div><div class="md:col-span-1"><label class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm theo ID</label><input type="text" id="searchIdFilter" placeholder="Nhập ID công việc..." class="w-full p-2 border rounded-lg"></div></div>`;
+            filtersContainer.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"><div><label class="block text-sm font-medium text-slate-600 mb-1">Loại công việc</label><select id="taskTypeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Người phụ trách</label><select id="assigneeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Trạng thái</label><select id="statusFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Đã Hoàn Thành">Đã Hoàn Thành</option><option value="Đang Thực Hiện">Đang Thực Hiện</option></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Cảnh Báo</label><select id="warningFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Quá Hạn">Quá Hạn</option><option value="Sắp đến hạn">Sắp đến hạn</option><option value="Không có">Không có</option></select></div></div><div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div><label for="fromDateFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Từ)</label><input type="text" id="fromDateFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg"></div><div><label for="toDateFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Đến)</label><input type="text" id="toDateFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg"></div><div><label for="searchMstFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm MST</label><input type="text" id="searchMstFilter" placeholder="Nhập MST..." class="w-full p-2 border rounded-lg"></div><div><label for="searchNntFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm Tên NNT</label><input type="text" id="searchNntFilter" placeholder="Nhập tên NNT..." class="w-full p-2 border rounded-lg"></div></div><div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div class="md:col-span-1"><label class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm theo ID</label><input type="text" id="searchIdFilter" placeholder="Nhập ID công việc..." class="w-full p-2 border rounded-lg"></div></div>`;
             
-            // Initial empty population, will be filled by applyFilters
             document.getElementById('taskTypeFilter').innerHTML = '<option value="all">Tất cả</option>';
             document.getElementById('assigneeFilter').innerHTML = '<option value="all">Tất cả</option>';
 
             filtersContainer.querySelectorAll('select').forEach(el => el.addEventListener('change', applyFilters));
-            document.getElementById('searchFilter').addEventListener('input', debouncedApplyFilters);
+            document.getElementById('searchMstFilter').addEventListener('input', debouncedApplyFilters);
+            document.getElementById('searchNntFilter').addEventListener('input', debouncedApplyFilters);
             document.getElementById('searchIdFilter').addEventListener('input', debouncedApplyFilters);
             document.getElementById('fromDateFilter').addEventListener('input', formatDateInput);
             document.getElementById('toDateFilter').addEventListener('input', formatDateInput);
@@ -573,7 +580,6 @@
         }
 
         function applyFilters() {
-            // Update assignee filter options
             const uniqueAssignees = [...new Set(tasksData.map(task => task.nguoiPhuTrach))].filter(Boolean).sort();
             const assigneeFilterEl = document.getElementById('assigneeFilter');
             const currentAssignee = assigneeFilterEl.value;
@@ -581,7 +587,6 @@
             uniqueAssignees.forEach(val => assigneeFilterEl.innerHTML += `<option value="${val}">${val}</option>`);
             if (uniqueAssignees.includes(currentAssignee)) assigneeFilterEl.value = currentAssignee;
             
-            // Update task type filter options
             const predefinedTypes = PREDEFINED_LISTS['Loại công việc'] || [];
             const dynamicTypes = tasksData.map(task => task['Loại công việc']).filter(Boolean);
             const allTypes = [...new Set([...predefinedTypes, ...dynamicTypes])].sort();
@@ -591,12 +596,12 @@
             allTypes.forEach(val => taskTypeFilterEl.innerHTML += `<option value="${val}">${val}</option>`);
             if(allTypes.includes(currentTaskType)) taskTypeFilterEl.value = currentTaskType;
 
-            // Read filter values
             const type = document.getElementById('taskTypeFilter').value;
             const assignee = document.getElementById('assigneeFilter').value;
             const coreStatus = document.getElementById('statusFilter').value;
             const warningStatus = document.getElementById('warningFilter').value;
-            const searchTerm = document.getElementById('searchFilter').value.toLowerCase();
+            const searchMst = document.getElementById('searchMstFilter').value.toLowerCase();
+            const searchNnt = document.getElementById('searchNntFilter').value.toLowerCase();
             const searchId = document.getElementById('searchIdFilter').value.toLowerCase();
             const fromDateStr = document.getElementById('fromDateFilter').value;
             const toDateStr = document.getElementById('toDateFilter').value;
@@ -608,7 +613,8 @@
                 const warningInfo = getWarningStatus(task);
                 const typeMatch = type === 'all' || task['Loại công việc'] === type;
                 const assigneeMatch = assignee === 'all' || task['nguoiPhuTrach'] === assignee;
-                const searchMatch = (task['MST/NỘI DUNG'] || '').toLowerCase().includes(searchTerm);
+                const mstMatch = !searchMst || (task['MST'] || '').toLowerCase().includes(searchMst);
+                const nntMatch = !searchNnt || (task['Tên NNT'] || '').toLowerCase().includes(searchNnt);
                 const idMatch = !searchId || (task.id && task.id.toLowerCase().includes(searchId));
                 const coreStatusMatch = (coreStatus === 'all') || (coreStatus === 'Đã Hoàn Thành' && task['Trạng thái'] === 'Đã Hoàn Thành') || (coreStatus === 'Đang Thực Hiện' && task['Trạng thái'] !== 'Đã Hoàn Thành');
                 const warningMatch = (warningStatus === 'all') || (warningStatus === 'Không có' && !warningInfo.label && task['Trạng thái'] !== 'Đã Hoàn Thành') || (warningInfo.label === warningStatus);
@@ -625,7 +631,7 @@
                     }
                 }
 
-                return typeMatch && assigneeMatch && searchMatch && coreStatusMatch && warningMatch && dateMatch && idMatch;
+                return typeMatch && assigneeMatch && mstMatch && nntMatch && coreStatusMatch && warningMatch && dateMatch && idMatch;
             });
             currentPage = 1;
             renderTable(filteredTasks);
@@ -633,6 +639,7 @@
             updateKPIs(filteredTasks);
             updateCharts(filteredTasks);
         }
+
         function openTaskModal(task = null) {
             const form = document.getElementById('taskForm');
             form.reset();
@@ -642,38 +649,30 @@
             const allTaskTypes = [...new Set([...(PREDEFINED_LISTS['Loại công việc'] || []), ...(tasksData.map(t => t['Loại công việc']).filter(Boolean))])].sort();
             
             TASK_FIELDS.forEach(field => {
-                // For a new task, if the user is a member, default 'nguoiPhuTrach' to their name.
-                // For an existing task, use the value from the task object.
                 const value = task ? task[field] : (field === 'nguoiPhuTrach' && currentUserProfile.role === 'member' ? currentUserProfile.name : '');
 
                 const div = document.createElement('div');
                 const displayName = field === 'nguoiPhuTrach' ? 'Người phụ trách' : field;
-                if (displayName.includes('NỘI DUNG') || displayName.includes('Ghi chú')) div.className = 'md:col-span-2';
+                if (displayName.includes('Tên NNT') || displayName.includes('Ghi chú')) div.className = 'md:col-span-2';
+                
                 let inputHtml;
-
-                // Get the list of options for dropdowns.
                 const allAssignees = [...new Set(tasksData.map(t => t.nguoiPhuTrach))].filter(Boolean).sort();
                 let currentList;
                 if (field === 'Loại công việc') {
                     currentList = allTaskTypes;
                 } else if (field === 'nguoiPhuTrach') {
-                    // This list will be used for leaders.
                     currentList = allAssignees;
                 } else {
                     currentList = PREDEFINED_LISTS[field];
                 }
 
-                // If the current user is a member and the field is 'nguoiPhuTrach',
-                // create a read-only input instead of a dropdown.
                 if (field === 'nguoiPhuTrach' && currentUserProfile.role === 'member') {
                     inputHtml = `<input type="text" id="field-${field}" value="${value || ''}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2 bg-slate-100" readonly>`;
                 }
-                // For all other cases that have a list (dropdowns)
                 else if (currentList) {
                     const options = currentList.map(opt => `<option value="${opt}" ${opt === value ? 'selected' : ''}>${opt}</option>`).join('');
                     inputHtml = `<select id="field-${field}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2">${options}</select>`;
                 } 
-                // For regular text inputs
                 else {
                     const isDate = displayName.includes('Ngày') || displayName.includes('Hạn');
                     inputHtml = `<input type="text" id="field-${field}" value="${value || ''}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2" ${isDate ? 'placeholder="dd/mm/yyyy"' : ''}>`;
@@ -773,7 +772,51 @@
             return {};
         }
         function getOverallStatus(task) { if (task['Trạng thái'] === 'Đã Hoàn Thành') return 'Đã Hoàn Thành'; const warning = getWarningStatus(task); return warning.label || 'Đang Thực Hiện'; }
+        
         function downloadTemplate() { const displayHeaders = TASK_FIELDS.map(f => f === 'nguoiPhuTrach' ? 'Người phụ trách' : f); const worksheet = XLSX.utils.aoa_to_sheet([displayHeaders]); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, worksheet, 'Tasks'); XLSX.writeFile(workbook, "Mau_Nhap_Cong_Viec.xlsx"); }
+        
+        // --- CHANGE START: New function to export filtered data ---
+        function exportToExcel() {
+            if (filteredTasks.length === 0) {
+                showNotification("Không có dữ liệu nào để kết xuất.", true);
+                return;
+            }
+
+            // Define the headers for the Excel file, matching the table display
+            const headers = [
+                'ID', 
+                ...TASK_FIELDS.map(h => h === 'nguoiPhuTrach' ? 'Người phụ trách' : h), 
+                'Ngày thay đổi cuối', 
+                'Cảnh Báo'
+            ];
+
+            // Map the filtered task data to rows for the Excel sheet
+            const dataRows = filteredTasks.map(task => {
+                const warningInfo = getWarningStatus(task);
+                return [
+                    task.id || '',
+                    ...TASK_FIELDS.map(field => task[field] || ''),
+                    formatTimestamp(task.lastModified),
+                    warningInfo.label || 'Không có'
+                ];
+            });
+
+            // Create the worksheet and workbook using SheetJS
+            const worksheetData = [headers, ...dataRows];
+            const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Danh sách công việc');
+
+            // Generate a dynamic filename and trigger the download
+            const today = new Date();
+            const dateString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            const fileName = `Danh_Sach_Cong_Viec_${dateString}.xlsx`;
+            XLSX.writeFile(workbook, fileName);
+
+            showNotification("Kết xuất file Excel thành công!");
+        }
+        // --- CHANGE END ---
+
         async function importFromExcel(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -791,7 +834,7 @@
                 const newTasksForLocal = [];
                 jsonData.forEach(row => {
                     const newTask = {};
-                    TASK_FIELDS.forEach(field => { const displayName = field === 'nguoiPhuTrach' ? 'Người phụ trách' : field; newTask[field] = row[displayName] || ''; });
+                    TASK_FIELDS.forEach(field => { const displayName = field === 'nguoiPhuTrach' ? 'Người phụ trách' : f; newTask[field] = row[displayName] || ''; });
                     newTask.createdBy = auth.currentUser.email;
                     newTask.createdAt = new Date();
                     newTask.lastModified = new Date();
