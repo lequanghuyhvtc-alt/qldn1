@@ -642,25 +642,48 @@
             const allTaskTypes = [...new Set([...(PREDEFINED_LISTS['Loại công việc'] || []), ...(tasksData.map(t => t['Loại công việc']).filter(Boolean))])].sort();
             
             TASK_FIELDS.forEach(field => {
+                // For a new task, if the user is a member, default 'nguoiPhuTrach' to their name.
+                // For an existing task, use the value from the task object.
                 const value = task ? task[field] : (field === 'nguoiPhuTrach' && currentUserProfile.role === 'member' ? currentUserProfile.name : '');
+
                 const div = document.createElement('div');
                 const displayName = field === 'nguoiPhuTrach' ? 'Người phụ trách' : field;
                 if (displayName.includes('NỘI DUNG') || displayName.includes('Ghi chú')) div.className = 'md:col-span-2';
                 let inputHtml;
 
-                const currentList = field === 'Loại công việc' ? allTaskTypes : PREDEFINED_LISTS[field];
-
-                if (currentList) {
-                    const options = currentList.map(opt => `<option value="${opt}" ${opt===value?'selected':''}>${opt}</option>`).join('');
-                    inputHtml = `<select id="field-${field}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2">${options}</select>`;
+                // Get the list of options for dropdowns.
+                const allAssignees = [...new Set(tasksData.map(t => t.nguoiPhuTrach))].filter(Boolean).sort();
+                let currentList;
+                if (field === 'Loại công việc') {
+                    currentList = allTaskTypes;
+                } else if (field === 'nguoiPhuTrach') {
+                    // This list will be used for leaders.
+                    currentList = allAssignees;
                 } else {
-                    const isDate = displayName.includes('Ngày') || displayName.includes('Hạn');
-                    inputHtml = `<input type="text" id="field-${field}" value="${value||''}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2" ${isDate?'placeholder="dd/mm/yyyy"':''}>`;
+                    currentList = PREDEFINED_LISTS[field];
                 }
+
+                // If the current user is a member and the field is 'nguoiPhuTrach',
+                // create a read-only input instead of a dropdown.
+                if (field === 'nguoiPhuTrach' && currentUserProfile.role === 'member') {
+                    inputHtml = `<input type="text" id="field-${field}" value="${value || ''}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2 bg-slate-100" readonly>`;
+                }
+                // For all other cases that have a list (dropdowns)
+                else if (currentList) {
+                    const options = currentList.map(opt => `<option value="${opt}" ${opt === value ? 'selected' : ''}>${opt}</option>`).join('');
+                    inputHtml = `<select id="field-${field}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2">${options}</select>`;
+                } 
+                // For regular text inputs
+                else {
+                    const isDate = displayName.includes('Ngày') || displayName.includes('Hạn');
+                    inputHtml = `<input type="text" id="field-${field}" value="${value || ''}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2" ${isDate ? 'placeholder="dd/mm/yyyy"' : ''}>`;
+                }
+
                 div.innerHTML = `<label for="field-${field}" class="block text-sm font-medium">${displayName}</label>${inputHtml}`;
                 formContainer.appendChild(div);
                 if (displayName.includes('Ngày') || displayName.includes('Hạn')) { document.getElementById(`field-${field}`).addEventListener('input', formatDateInput); }
             });
+
             document.getElementById('modalTitle').textContent = task ? 'Chỉnh sửa Công Việc' : 'Thêm Công Việc Mới';
             document.getElementById('taskId').value = task ? task.id : '';
             const deleteButton = document.getElementById('deleteTaskButton');
@@ -876,3 +899,4 @@
     </script>
 </body>
 </html>
+
