@@ -61,12 +61,11 @@
     <div id="authContainer" class="flex items-center justify-center min-h-screen bg-slate-100">
         <!-- ... (HTML phần đăng nhập/đăng ký) ... -->
         <div class="p-8 bg-white rounded-xl shadow-lg max-w-md w-full">
-            <svg class="h-20 w-auto mx-auto mb-4 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25 3h4.5M15 3.75l3 3m0 0l-3 3m3-3H9" />
-            </svg>
+            <!-- THAY ĐỔI: Chỉnh sửa class của ảnh -->
+            <img src="https://raw.githubusercontent.com/lequanghuyhvtc-alt/qldn1/refs/heads/main/5-15875454604011998230042-16036836450041268704454-1603763865239-1603763866080171610522.jpg" alt="Biểu tượng đăng nhập" class="w-full h-auto mx-auto mb-6 rounded-lg object-cover shadow-md">
 
             <h1 class="text-2xl font-bold text-slate-800 mb-2 text-center">Số tay điện tử Quản lý công việc</h1>
-            <p id="form-title" class="text-slate-500 mb-6 text-center">Vui lòng Đăng nhập để tiếp tục</p>
+            <p id="form-title" class="text-slate-500 mb-6 text-center">Vui Lòng đăng nhập để tiếp tục</p>
 
             <form id="loginForm">
                 <input type="text" id="nameInput" class="w-full px-4 py-2 border rounded-lg mb-3 hidden" placeholder="Họ và Tên">
@@ -101,11 +100,8 @@
 
     <div id="dashboardContainer" class="container mx-auto p-4 md:p-6 lg:p-8 hidden">
         <header class="text-center mb-8 relative">
-            <div class="absolute top-0 left-0">
-                 <svg class="h-16 w-auto text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25 3h4.5M15 3.75l3 3m0 0l-3 3m3-3H9" />
-                </svg>
-            </div>
+             <!-- THAY ĐỔI: Thay thế SVG bằng thẻ IMG -->
+            <img src="https://raw.githubusercontent.com/lequanghuyhvtc-alt/qldn1/refs/heads/main/5-15875454604011998230042-16036836450041268704454-1603763865239-1603763866080171610522.jpg" alt="Biểu tượng dashboard" class="absolute top-0 left-0 h-16 w-16 rounded-full object-cover">
             <div id="userProfile" class="absolute top-2 right-2 flex items-center space-x-3 bg-white p-2 rounded-lg shadow-sm">
                 <div>
                     <p id="userName" class="text-sm font-semibold text-slate-800"></p>
@@ -120,7 +116,7 @@
             <section id="adminSection" class="mb-6 section-card hidden">
                 <h2 class="text-xl font-semibold text-slate-700 mb-4">Phê duyệt & Phân quyền User</h2>
                 <div id="pendingUsersList" class="space-y-3"></div>
-                <p id="noPendingUsers" class="text-slate-500 hidden">Vui lòng phê duyệt, phân quyền người dùng!.</p>
+                <p id="noPendingUsers" class="text-slate-500 hidden">Vui lòng phê duyệt, phân quyền người dùng!</p>
             </section>
             
             <section class="mb-6 section-card">
