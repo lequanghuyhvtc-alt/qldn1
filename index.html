@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Số Tay Điện Tử Quản Lý Công Việc (LQHUY)</title>
+    <title>Số Tay Điện Tử Quản Lý Công Việc (Tối ưu hóa)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
@@ -205,7 +205,6 @@
         let lastVisibleDoc = null; // Document cuối cùng của trang hiện tại
         let firstVisibleDoc = null; // Document đầu tiên của trang hiện tại
         let currentPage = 1;
-        let totalTasksForKPIs = 0; // Tổng số CV sau khi lọc, dùng cho KPIs
 
         const TASK_FIELDS = ['Loại công việc', 'MST', 'Tên NNT', 'nguoiPhuTrach', 'Ngày giao', 'Hạn xử lý', 'Trạng thái', 'Ghi chú'];
         let statusChart, workloadChart, taskTypeStatusChart;
@@ -217,7 +216,6 @@
 
         const authContainer = document.getElementById('authContainer');
         const dashboardContainer = document.getElementById('dashboardContainer');
-        // ... (các biến DOM element khác)
         
         // --- QUẢN LÝ XÁC THỰC (AUTH) ---
         onAuthStateChanged(auth, async (user) => {
@@ -234,12 +232,10 @@
         });
 
         async function loadInitialData(user) {
-            // ... (hàm này giữ nguyên logic, chỉ thay đổi cách gọi hàm tải dữ liệu)
             try {
-                // ... (xác thực user, lấy profile)
                 const userDoc = await getDoc(doc(db, "users", user.uid));
                 if (!userDoc.exists()) throw new Error('Không tìm thấy thông tin hồ sơ người dùng.');
-                currentUserProfile = userDoc.data();
+                currentUserProfile = { id: user.uid, ...userDoc.data() };
                 if (currentUserProfile.role === 'pending') throw new Error('Tài khoản của bạn đang chờ quản trị viên phê duyệt.');
 
                 document.getElementById('userName').textContent = currentUserProfile.name;
@@ -256,7 +252,6 @@
                 dashboardContainer.classList.remove('hidden');
                 showNotification("Kết nối và tải dữ liệu thành công!");
 
-                // Welcome modal logic
                 if (!sessionStorage.getItem('welcomeShown')) {
                     document.getElementById('welcomeMessage').innerHTML = `Chào mừng <span class="text-indigo-600">${currentUserProfile.name}</span>!`;
                     document.getElementById('welcomeModal').classList.remove('hidden');
@@ -283,38 +278,31 @@
             document.getElementById('logoutButton').addEventListener('click', () => signOut(auth));
 
             renderTableHeader();
-            populateFilters(); // Chỉ chạy 1 lần để tạo ra các ô filter
-            await fetchAndRenderTasks('initial'); // Tải trang dữ liệu đầu tiên
+            await populateFilters(); 
+            await fetchAndRenderTasks('initial'); 
         }
 
-        // --- HÀM TRUNG TÂM MỚI: TẢI VÀ HIỂN THỊ DỮ LIỆU (LỌC & PHÂN TRANG SERVER-SIDE) ---
+        // --- HÀM TẢI VÀ HIỂN THỊ DỮ LIỆU ---
         async function fetchAndRenderTasks(direction) {
             document.getElementById('table-loader').classList.remove('hidden');
             document.getElementById('tasksTableBody').innerHTML = '';
             document.getElementById('no-results').classList.add('hidden');
             
             try {
-                // 1. XÂY DỰNG CÂU TRUY VẤN (QUERY) CƠ BẢN
-                let tasksQuery = query(collection(db, "tasks"));
-                const queryConstraints = []; // Mảng chứa các điều kiện lọc và sắp xếp
+                const queryConstraints = []; 
 
-                // **QUAN TRỌNG**: Nếu là member, chỉ cho xem công việc của chính mình
+                // Lọc theo vai trò trước khi áp dụng các bộ lọc khác
                 if (currentUserProfile && currentUserProfile.role === 'member') {
                     queryConstraints.push(where("nguoiPhuTrach", "==", currentUserProfile.name));
                 }
 
-                // 2. ÁP DỤNG CÁC BỘ LỌC (SERVER-SIDE FILTERING)
                 const type = document.getElementById('taskTypeFilter').value;
                 const assignee = document.getElementById('assigneeFilter').value;
                 const coreStatus = document.getElementById('statusFilter').value;
-                const searchMst = document.getElementById('searchMstFilter').value;
-                const searchNnt = document.getElementById('searchNntFilter').value;
-                const searchId = document.getElementById('searchIdFilter').value;
                 
                 if (type !== 'all') queryConstraints.push(where('Loại công việc', '==', type));
                 if (assignee !== 'all') queryConstraints.push(where('nguoiPhuTrach', '==', assignee));
                 if (coreStatus !== 'all') {
-                     // Thay vì lọc 'Đang thực hiện', ta lọc các trạng thái không phải 'Đã hoàn thành'
                     if (coreStatus === 'Đang Thực Hiện') {
                        queryConstraints.push(where('Trạng thái', 'in', ['Đang Thực Hiện', 'Đã Hủy']));
                     } else {
@@ -322,64 +310,41 @@
                     }
                 }
                 
-                // Firestore không hỗ trợ tìm kiếm "contains" trực tiếp.
-                // Các bộ lọc tìm kiếm (MST, NNT, ID) cần có giải pháp nâng cao hơn (vd: Algolia)
-                // để có hiệu quả tốt nhất. Ở đây chúng ta tạm thời bỏ qua để tập trung vào phân trang.
-                // Nếu cần, có thể lọc client-side trên trang hiện tại.
-
-                // 3. SẮP XẾP
-                // Luôn sắp xếp theo một trường nhất định để phân trang hoạt động ổn định
                 queryConstraints.push(orderBy("createdAt", "desc"));
 
-                // 4. PHÂN TRANG (SERVER-SIDE PAGINATION)
                 if (direction === 'next' && lastVisibleDoc) {
                     queryConstraints.push(startAfter(lastVisibleDoc));
                     currentPage++;
                 } else if (direction === 'prev' && firstVisibleDoc) {
-                    // Để quay lại trang trước, ta phải đảo ngược query và lấy `limitToLast`
-                    // Đây là một kỹ thuật phức tạp hơn, tạm thời chỉ hỗ trợ "Next" và "Reset"
-                    // Để đơn giản hóa, nút "Prev" sẽ quay về trang 1
-                    currentPage = 1;
-                } else { // 'initial'
+                    currentPage = Math.max(1, currentPage - 1);
+                    const prevQuery = query(collection(db, "tasks"), ...queryConstraints, endBefore(firstVisibleDoc), limitToLast(PAGE_SIZE));
+                    const prevSnapshot = await getDocs(prevQuery);
+                    const tasks = prevSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                    firstVisibleDoc = prevSnapshot.docs[0] || null;
+                    lastVisibleDoc = prevSnapshot.docs[prevSnapshot.docs.length - 1] || null;
+                    renderClientSideFiltered(tasks);
+                    renderPaginationControls(prevSnapshot.size);
+                    return;
+                } else { 
                     currentPage = 1;
                     lastVisibleDoc = null;
                     firstVisibleDoc = null;
                 }
-                queryConstraints.push(limit(PAGE_SIZE));
-
-                // 5. THỰC THI QUERY
-                const finalQuery = query(collection(db, "tasks"), ...queryConstraints);
+                
+                const finalQuery = query(collection(db, "tasks"), ...queryConstraints, limit(PAGE_SIZE));
                 const snapshot = await getDocs(finalQuery);
 
                 const tasks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 
-                // 6. CẬP NHẬT TRẠNG THÁI VÀ HIỂN THỊ
                 firstVisibleDoc = snapshot.docs[0] || null;
                 lastVisibleDoc = snapshot.docs[snapshot.docs.length - 1] || null;
 
-                // Lọc client-side cho các điều kiện không thể lọc trên server (ví dụ: Cảnh báo, tìm kiếm)
-                const clientFilteredTasks = tasks.filter(task => {
-                    const mstMatch = !searchMst || (task['MST'] || '').toLowerCase().includes(searchMst.toLowerCase());
-                    const nntMatch = !searchNnt || (task['Tên NNT'] || '').toLowerCase().includes(searchNnt.toLowerCase());
-                    const idMatch = !searchId || (task.id && task.id.toLowerCase().includes(searchId.toLowerCase()));
-                    
-                    const warningStatus = document.getElementById('warningFilter').value;
-                    const warningInfo = getWarningStatus(task);
-                    const warningMatch = (warningStatus === 'all') || (warningStatus === 'Không có' && !warningInfo.label && task['Trạng thái'] !== 'Đã Hoàn Thành') || (warningInfo.label === warningStatus);
-
-                    return mstMatch && nntMatch && idMatch && warningMatch;
-                });
-
-                renderTable(clientFilteredTasks);
+                renderClientSideFiltered(tasks);
                 renderPaginationControls(snapshot.size);
 
-                // Chỉ cập nhật KPI và biểu đồ khi thực hiện một bộ lọc mới (trang đầu tiên)
                 if (direction === 'initial') {
-                    // Để có KPI chính xác, cần một query đếm tổng số, nhưng sẽ tốn thêm chi phí.
-                    // Tạm thời, ta có thể hiển thị KPI dựa trên trang đầu tiên hoặc ẩn đi.
-                    // Ở đây, chúng ta sẽ cập nhật dựa trên kết quả trang đầu.
-                    updateKPIs(clientFilteredTasks);
-                    updateCharts(clientFilteredTasks);
+                    updateKPIs(tasks);
+                    updateCharts(tasks);
                 }
 
             } catch (error) {
@@ -392,6 +357,23 @@
             }
         }
         
+        function renderClientSideFiltered(tasks) {
+            const searchMst = document.getElementById('searchMstFilter').value.toLowerCase();
+            const searchNnt = document.getElementById('searchNntFilter').value.toLowerCase();
+            const searchId = document.getElementById('searchIdFilter').value.toLowerCase();
+            const warningStatus = document.getElementById('warningFilter').value;
+
+            const clientFilteredTasks = tasks.filter(task => {
+                const mstMatch = !searchMst || (task['MST'] || '').toLowerCase().includes(searchMst);
+                const nntMatch = !searchNnt || (task['Tên NNT'] || '').toLowerCase().includes(searchNnt);
+                const idMatch = !searchId || (task.id && task.id.toLowerCase().includes(searchId));
+                const warningInfo = getWarningStatus(task);
+                const warningMatch = (warningStatus === 'all') || (warningStatus === 'Không có' && !warningInfo.label && task['Trạng thái'] !== 'Đã Hoàn Thành') || (warningInfo.label === warningStatus);
+                return mstMatch && nntMatch && idMatch && warningMatch;
+            });
+            renderTable(clientFilteredTasks);
+        }
+
         // --- CÁC HÀM HIỂN THỊ (RENDER) ---
         function renderTable(data) {
             const tableBody = document.getElementById('tasksTableBody');
@@ -426,42 +408,45 @@
                     <button id="nextPage" class="px-3 py-1 border rounded-lg" ${!hasNext ? 'disabled' : ''}>Trang sau &rarr;</button>
                 </div>`;
                 
-            if(hasPrev) document.getElementById('prevPage').onclick = () => {
-                // Logic cho trang trước phức tạp hơn, tạm thời reset về trang 1
-                fetchAndRenderTasks('initial'); 
-            };
+            if(hasPrev) document.getElementById('prevPage').onclick = () => fetchAndRenderTasks('prev'); 
             if(hasNext) document.getElementById('nextPage').onclick = () => fetchAndRenderTasks('next');
         }
 
         // --- BỘ LỌC VÀ SỰ KIỆN ---
-        function populateFilters() {
+        async function populateFilters() {
              const filtersContainer = document.getElementById('filters');
             filtersContainer.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"><div><label class="block text-sm font-medium text-slate-600 mb-1">Loại công việc</label><select id="taskTypeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Người phụ trách</label><select id="assigneeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Trạng thái</label><select id="statusFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Đã Hoàn Thành">Đã Hoàn Thành</option><option value="Đang Thực Hiện">Đang Thực Hiện</option></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Cảnh Báo</label><select id="warningFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Quá Hạn">Quá Hạn</option><option value="Sắp đến hạn">Sắp đến hạn</option><option value="Không có">Không có</option></select></div></div><div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div><label for="searchMstFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm MST</label><input type="text" id="searchMstFilter" placeholder="Nhập MST..." class="w-full p-2 border rounded-lg"></div><div><label for="searchNntFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm Tên NNT</label><input type="text" id="searchNntFilter" placeholder="Nhập tên NNT..." class="w-full p-2 border rounded-lg"></div><div><label for="searchIdFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm theo ID</label><input type="text" id="searchIdFilter" placeholder="Nhập ID công việc..." class="w-full p-2 border rounded-lg"></div></div>`;
             
-            // Populate select options
+            showNotification("Đang tải tùy chọn bộ lọc...");
+            const tasksSnapshot = await getDocs(query(collection(db, "tasks")));
+            const allTasksData = tasksSnapshot.docs.map(d => d.data());
+
+            const uniqueAssignees = [...new Set(allTasksData.map(task => task.nguoiPhuTrach).filter(Boolean))].sort();
+            const assigneeFilterEl = document.getElementById('assigneeFilter');
+            assigneeFilterEl.innerHTML = '<option value="all">Tất cả</option>' + uniqueAssignees.map(o => `<option value="${o}">${o}</option>`).join('');
+
+            // SỬA LẠI: Mặc định chọn tên user hiện tại nếu không phải leader
+            if (currentUserProfile && currentUserProfile.role !== 'leader') {
+                assigneeFilterEl.value = currentUserProfile.name;
+            }
+
+            const dynamicTaskTypes = allTasksData.map(task => task['Loại công việc']).filter(Boolean);
+            const allTaskTypes = [...new Set([...PREDEFINED_LISTS['Loại công việc'], ...dynamicTaskTypes])].sort();
             const taskTypeFilterEl = document.getElementById('taskTypeFilter');
-            taskTypeFilterEl.innerHTML = '<option value="all">Tất cả</option>' + PREDEFINED_LISTS['Loại công việc'].map(o => `<option value="${o}">${o}</option>`).join('');
-            
-            // Populate assignees dynamically (chỉ chạy 1 lần lúc đầu)
-            getDocs(collection(db, "users")).then(snapshot => {
-                const assignees = snapshot.docs.map(d => d.data().name).filter(Boolean).sort();
-                const assigneeFilterEl = document.getElementById('assigneeFilter');
-                assigneeFilterEl.innerHTML = '<option value="all">Tất cả</option>' + assignees.map(o => `<option value="${o}">${o}</option>`).join('');
-            });
-            
-            // THAY ĐỔI: Gắn sự kiện để gọi lại fetchAndRenderTasks thay vì lọc client-side
+            taskTypeFilterEl.innerHTML = '<option value="all">Tất cả</option>' + allTaskTypes.map(o => `<option value="${o}">${o}</option>`).join('');
+
             const triggerFetch = () => fetchAndRenderTasks('initial');
             let debounceTimer;
             const debouncedFetch = () => {
                 clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(triggerFetch, 500); // Chờ 500ms sau khi người dùng gõ xong
+                debounceTimer = setTimeout(triggerFetch, 500);
             };
 
             filtersContainer.querySelectorAll('select').forEach(el => el.addEventListener('change', triggerFetch));
             filtersContainer.querySelectorAll('input').forEach(el => el.addEventListener('input', debouncedFetch));
         }
 
-        // --- CÁC HÀM CRUD (CREATE, READ, UPDATE, DELETE) ---
+        // --- CRUD ---
         async function saveTask(e) {
             e.preventDefault();
             const taskId = document.getElementById('taskId').value;
@@ -477,7 +462,7 @@
                 }
                 taskData[field] = input.value;
             }
-            taskData.lastModified = serverTimestamp(); // Sử dụng server timestamp
+            taskData.lastModified = serverTimestamp();
             taskData.modifiedBy = auth.currentUser.email;
 
             try {
@@ -485,10 +470,10 @@
                     await setDoc(doc(db, "tasks", taskId), taskData, { merge: true });
                 } else {
                     taskData.createdBy = auth.currentUser.email;
-                    taskData.createdAt = serverTimestamp(); // Sử dụng server timestamp
+                    taskData.createdAt = serverTimestamp();
                     await addDoc(collection(db, "tasks"), taskData);
                 }
-                await fetchAndRenderTasks('initial'); // Tải lại dữ liệu sau khi lưu
+                await fetchAndRenderTasks('initial');
                 closeTaskModal();
                 showNotification(taskId ? "Cập nhật công việc thành công!" : "Thêm công việc thành công!");
             } catch (error) {
@@ -503,7 +488,7 @@
             if (!taskId) return;
             try {
                 await deleteDoc(doc(db, "tasks", taskId));
-                await fetchAndRenderTasks('initial'); // Tải lại dữ liệu sau khi xóa
+                await fetchAndRenderTasks('initial');
                 closeTaskModal();
                 showNotification("Xóa công việc thành công!");
             } catch (error) {
@@ -512,8 +497,86 @@
             }
         }
 
-        // --- CÁC HÀM TIỆN ÍCH KHÁC (GIỮ NGUYÊN HOẶC ÍT THAY ĐỔI) ---
-        // (bao gồm: formatTimestamp, getWarningStatus, openTaskModal, modals, excel, admin section, auth form logic...)
+        // --- KHÔI PHỤC CÁC HÀM ADMIN ---
+        function renderAdminSection() {
+            const adminSection = document.getElementById('adminSection');
+            const pendingList = document.getElementById('pendingUsersList');
+            const noPendingMsg = document.getElementById('noPendingUsers');
+            
+            pendingList.innerHTML = ''; 
+
+            const pendingUsers = allUsersData.filter(user => user.role === 'pending');
+
+            noPendingMsg.classList.toggle('hidden', pendingUsers.length === 0);
+
+            pendingUsers.forEach(user => {
+                const userDiv = document.createElement('div');
+                userDiv.className = 'flex items-center justify-between p-3 bg-slate-50 rounded-lg';
+                userDiv.id = `pending-user-${user.id}`;
+
+                userDiv.innerHTML = `
+                    <div>
+                        <p class="font-semibold text-slate-800">${user.name}</p>
+                        <p class="text-sm text-slate-500">${user.email}</p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <select data-userid="${user.id}" class="role-select bg-white border border-slate-300 rounded-md shadow-sm p-1.5 text-sm">
+                            <option value="member">Member</option>
+                            <option value="leader">Leader</option>
+                        </select>
+                        <button data-userid="${user.id}" class="update-role-btn px-3 py-1 text-sm bg-blue-100 text-blue-700 font-semibold rounded-md hover:bg-blue-200">Cập nhật</button>
+                        <button data-userid="${user.id}" class="reject-user-btn px-3 py-1 text-sm bg-red-100 text-red-700 font-semibold rounded-md hover:bg-red-200">Từ chối</button>
+                    </div>
+                `;
+                pendingList.appendChild(userDiv);
+            });
+
+            pendingList.addEventListener('click', (e) => {
+                const target = e.target;
+                const userId = target.dataset.userid;
+                if (!userId) return;
+
+                if (target.classList.contains('update-role-btn')) {
+                    const selectEl = pendingList.querySelector(`.role-select[data-userid="${userId}"]`);
+                    const newRole = selectEl.value;
+                    updateUserRole(userId, newRole);
+                } else if (target.classList.contains('reject-user-btn')) {
+                    rejectUser(userId);
+                }
+            });
+
+            adminSection.classList.remove('hidden');
+        }
+
+        async function updateUserRole(userId, newRole) {
+            try {
+                await setDoc(doc(db, "users", userId), { role: newRole }, { merge: true });
+                const userIndex = allUsersData.findIndex(u => u.id === userId);
+                if (userIndex > -1) {
+                    allUsersData[userIndex].role = newRole;
+                }
+                renderAdminSection(); 
+                showNotification(`Đã cập nhật quyền cho người dùng thành "${newRole}"!`);
+            } catch (error) {
+                console.error("Error updating user role:", error);
+                showNotification('Có lỗi xảy ra khi cập nhật quyền.', true);
+            }
+        }
+
+        async function rejectUser(userId) {
+            if (!confirm('Bạn có chắc chắn muốn từ chối và xóa người dùng này không?')) return;
+            try {
+                await deleteDoc(doc(db, "users", userId));
+                allUsersData = allUsersData.filter(u => u.id !== userId);
+                renderAdminSection();
+                showNotification('Đã từ chối và xóa người dùng.');
+            } catch (error) {
+                console.error("Error rejecting user:", error);
+                showNotification('Có lỗi xảy ra khi từ chối người dùng.', true);
+            }
+        }
+        
+        // --- CÁC HÀM TIỆN ÍCH KHÁC ---
         function renderTableHeader() { 
             document.getElementById('tasksTableHeader').innerHTML = '<th class="px-4 py-3">ID</th>' + 
             TASK_FIELDS.map(h => `<th class="px-4 py-3">${h==='nguoiPhuTrach'?'Người phụ trách':h}</th>`).join('') + 
@@ -561,7 +624,6 @@
             taskTypeStatusChart = new Chart('taskTypeStatusChart', { type: 'bar', data: { labels: taskTypes, datasets: ALL_STATUSES.map(s => ({ label: s, data: taskTypes.map(type => data.filter(t => t['Loại công việc'] === type && getOverallStatus(t) === s).length), backgroundColor: CORE_STATUSES[s] })) }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } }, plugins: { legend: { position: 'bottom' }, datalabels: DATALABELS_CONFIG } } });
         }
         
-        // ... Các hàm khác như showNotification, auth form, modals, excel export... giữ nguyên
         function showNotification(message, isError = false) {
             const popup = document.getElementById('notificationPopup');
             const messageEl = document.getElementById('notificationMessage');
@@ -573,7 +635,6 @@
             setTimeout(() => { popup.classList.add('opacity-0'); popup.classList.remove('opacity-100'); setTimeout(() => popup.classList.add('hidden', 'translate-y-4'), 300); }, 4000);
         }
 
-        // Logic form đăng nhập/đăng ký, không thay đổi nhiều
         function setupAuthFormListeners() {
             const loginForm = document.getElementById('loginForm');
             const toggleFormLink = document.getElementById('toggleForm');
@@ -671,7 +732,6 @@
         function downloadTemplate() { const displayHeaders = TASK_FIELDS.map(f => f === 'nguoiPhuTrach' ? 'Người phụ trách' : f); const worksheet = XLSX.utils.aoa_to_sheet([displayHeaders]); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, worksheet, 'Tasks'); XLSX.writeFile(workbook, "Mau_Nhap_Cong_Viec.xlsx"); }
         async function exportToExcel() {
              showNotification("Đang chuẩn bị dữ liệu để xuất file...");
-            // Lấy tất cả dữ liệu đã lọc (không phân trang) để xuất
             const queryConstraints = [];
             if (currentUserProfile && currentUserProfile.role === 'member') {
                 queryConstraints.push(where("nguoiPhuTrach", "==", currentUserProfile.name));
@@ -697,14 +757,11 @@
             XLSX.writeFile(workbook, `Xuat_Cong_Viec_${new Date().toISOString().slice(0,10)}.xlsx`);
             showNotification("Kết xuất file Excel thành công!");
         }
-        // ... Các hàm khác giữ nguyên
         async function importFromExcel(event) { /* ... */ }
-        function renderAdminSection() { /* ... */ }
-        async function updateUserRole(userId, newRole) { /* ... */ }
-        async function rejectUser(userId) { /* ... */ }
 
         setupAuthFormListeners();
     });
     </script>
 </body>
 </html>
+
