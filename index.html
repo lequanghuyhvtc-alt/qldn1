@@ -17,11 +17,12 @@
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
         .chart-container { position: relative; width: 100%; max-width: 600px; margin: auto; height: 320px; }
-        .table-responsive { display: block; width: 100%; overflow-x: auto; }
+        .table-responsive { display: block; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .kpi-card { transition: transform 0.2s, box-shadow 0.2s; }
         .kpi-card:hover { transform: translateY(-5px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
         #tasksTableBody tr { cursor: pointer; }
         .section-card { background-color: white; border-radius: 0.75rem; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); border: 1px solid #e2e8f0; }
+        .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
     </style>
 </head>
 <body class="text-slate-800">
@@ -47,10 +48,6 @@
             <div id="networkError" class="text-red-600 bg-red-50 p-3 rounded-md mt-4 text-sm" style="display: none;">
                 <p class="font-bold">Lỗi kết nối!</p>
                 <p>Không thể tải các tài nguyên cần thiết. Vui lòng kiểm tra lại kết nối mạng và thử tải lại trang.</p>
-            </div>
-            
-            <div id="connectionSuccess" class="text-green-700 bg-green-100 p-3 rounded-md mt-4 text-sm text-center" style="display: none;">
-                <p class="font-semibold">Đã kết nối thành công với máy chủ!</p>
             </div>
             
             <p class="text-center text-sm mt-4">
@@ -150,6 +147,12 @@
             <button id="closeWelcomeButton" class="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">Đóng</button>
         </div>
     </div>
+    
+    <div id="notificationPopup" class="fixed bottom-5 right-5 z-[100] hidden opacity-0 translate-y-4 transform transition-all duration-300">
+        <div class="p-4 rounded-lg shadow-lg text-white font-semibold">
+            <p id="notificationMessage"></p>
+        </div>
+    </div>
 
     <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -164,12 +167,6 @@
             handleScriptLoadError();
             return; 
         }
-        
-        const connectionSuccessEl = document.getElementById('connectionSuccess');
-        connectionSuccessEl.style.display = 'block';
-        setTimeout(() => {
-            connectionSuccessEl.style.display = 'none';
-        }, 4000);
 
         const firebaseConfig = {
           apiKey: "AIzaSyDxteIBXiT92KbGy_5M0HKnkflgCiGn1-c",
@@ -212,6 +209,26 @@
         const loadMoreContainer = document.getElementById('loadMoreContainer');
 
         let isLogin = true;
+
+        function showNotification(message, isError = false) {
+            const popup = document.getElementById('notificationPopup');
+            const messageEl = document.getElementById('notificationMessage');
+            const container = popup.querySelector('div');
+
+            messageEl.textContent = message;
+            container.className = `p-4 rounded-lg shadow-lg text-white font-semibold ${isError ? 'bg-rose-500' : 'bg-green-500'}`;
+
+            popup.classList.remove('hidden', 'opacity-0', 'translate-y-4');
+            popup.classList.add('opacity-100', 'translate-y-0');
+
+            setTimeout(() => {
+                popup.classList.add('opacity-0');
+                popup.classList.remove('opacity-100');
+                setTimeout(() => {
+                    popup.classList.add('hidden', 'translate-y-4');
+                }, 300);
+            }, 4000);
+        }
 
         function updateLoginStatus(message, isError = false) {
             const loginForm = document.getElementById('loginForm');
@@ -352,6 +369,7 @@
 
                 authContainer.classList.add('hidden');
                 dashboardContainer.classList.remove('hidden');
+                showNotification("Kết nối và tải dữ liệu thành công!");
 
                 if (!sessionStorage.getItem('welcomeShown')) {
                     document.getElementById('welcomeMessage').innerHTML = `Chào mừng <span class="text-indigo-600">${currentUserProfile.name}</span> đến với Ứng dụng Quản lý – Theo dõi công việc`;
@@ -418,13 +436,14 @@
                 if (isInitial) {
                     populateFilters();
                 }
-
+                
                 applyFilters();
 
                 loadMoreButton.disabled = false;
                 loadMoreButton.textContent = 'Tải thêm công việc';
             }).catch(error => {
                 console.error("Error fetching tasks: ", error);
+                showNotification("Lỗi khi tải công việc.", true);
                 loadMoreButton.textContent = 'Lỗi! Thử lại';
                 loadMoreButton.disabled = false;
             });
@@ -440,26 +459,34 @@
                 const displayName = field === 'nguoiPhuTrach' ? 'Người phụ trách' : field;
                 const isDate = displayName.includes('Ngày') || displayName.includes('Hạn');
                 if (isDate && input.value && !dateRegex.test(input.value)) {
-                    alert(`Định dạng ngày cho trường "${displayName}" không hợp lệ. Vui lòng nhập theo dạng dd/mm/yyyy.`);
+                    showNotification(`Định dạng ngày cho trường "${displayName}" không hợp lệ. Vui lòng nhập theo dạng dd/mm/yyyy.`, true);
                     return;
                 }
                 taskData[field] = input.value;
             }
             taskData.lastModified = new Date();
             taskData.modifiedBy = auth.currentUser.email;
+
             try {
                 if (taskId) {
                     await db.collection("tasks").doc(taskId).set(taskData, { merge: true });
+                    const taskIndex = tasksData.findIndex(t => t.id === taskId);
+                    if (taskIndex > -1) {
+                        tasksData[taskIndex] = { ...tasksData[taskIndex], ...taskData, id: taskId };
+                    }
                 } else {
                     taskData.createdBy = auth.currentUser.email;
                     taskData.createdAt = new Date();
-                    await db.collection("tasks").add(taskData);
+                    const docRef = await db.collection("tasks").add(taskData);
+                    const newTask = { id: docRef.id, ...taskData };
+                    tasksData.unshift(newTask);
                 }
-                location.reload(); 
+                applyFilters();
                 closeTaskModal();
+                showNotification(taskId ? "Cập nhật công việc thành công!" : "Thêm công việc thành công!");
             } catch (error) {
                 console.error("Error saving task: ", error);
-                alert("Lưu công việc thất bại.");
+                showNotification("Lưu công việc thất bại.", true);
             }
         }
         
@@ -469,11 +496,13 @@
             if (!taskId) return;
             try {
                 await db.collection("tasks").doc(taskId).delete();
-                location.reload(); 
+                tasksData = tasksData.filter(t => t.id !== taskId);
+                applyFilters();
                 closeTaskModal();
+                showNotification("Xóa công việc thành công!");
             } catch (error) {
                 console.error("Error deleting task: ", error);
-                alert("Xóa công việc thất bại.");
+                showNotification("Xóa công việc thất bại.", true);
             }
         }
 
@@ -488,24 +517,36 @@
 
         function populateFilters() {
             const filtersContainer = document.getElementById('filters');
-            filtersContainer.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"><div><label class="block text-sm font-medium text-slate-600 mb-1">Loại công việc</label><select id="taskTypeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Người phụ trách</label><select id="assigneeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Trạng thái</label><select id="statusFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Đã Hoàn Thành">Đã Hoàn Thành</option><option value="Đang Thực Hiện">Đang Thực Hiện</option></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Cảnh Báo</label><select id="warningFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Quá Hạn">Quá Hạn</option><option value="Sắp đến hạn">Sắp đến hạn</option><option value="Không có">Không có</option></select></div></div><div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div><label for="fromDateFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Từ ngày)</label><input type="text" id="fromDateFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg"></div><div><label for="toDateFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Đến ngày)</label><input type="text" id="toDateFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg"></div><div class="md:col-span-2"><label class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm (MST/Nội dung)</label><input type="text" id="searchFilter" placeholder="Nhập từ khóa..." class="w-full p-2 border rounded-lg"></div></div>`;
+            filtersContainer.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"><div><label class="block text-sm font-medium text-slate-600 mb-1">Loại công việc</label><select id="taskTypeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Người phụ trách</label><select id="assigneeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Trạng thái</label><select id="statusFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Đã Hoàn Thành">Đã Hoàn Thành</option><option value="Đang Thực Hiện">Đang Thực Hiện</option></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Cảnh Báo</label><select id="warningFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Quá Hạn">Quá Hạn</option><option value="Sắp đến hạn">Sắp đến hạn</option><option value="Không có">Không có</option></select></div></div><div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div><label for="fromDateFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Từ)</label><input type="text" id="fromDateFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg"></div><div><label for="toDateFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Đến)</label><input type="text" id="toDateFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg"></div><div class="md:col-span-1"><label class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm (MST/Nội dung)</label><input type="text" id="searchFilter" placeholder="Nhập từ khóa..." class="w-full p-2 border rounded-lg"></div><div class="md:col-span-1"><label class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm theo ID</label><input type="text" id="searchIdFilter" placeholder="Nhập ID công việc..." class="w-full p-2 border rounded-lg"></div></div>`;
             
-            const populateSelect = (id, key) => {
-                const select = document.getElementById(id);
-                const values = PREDEFINED_LISTS[key] || [];
-                select.innerHTML = '<option value="all">Tất cả</option>';
-                values.forEach(val => select.innerHTML += `<option value="${val}">${val}</option>`);
-            };
-            populateSelect('taskTypeFilter', 'Loại công việc');
-            populateSelect('assigneeFilter', 'nguoiPhuTrach');
+            // Initial empty population, will be filled by applyFilters
+            document.getElementById('taskTypeFilter').innerHTML = '<option value="all">Tất cả</option>';
+            document.getElementById('assigneeFilter').innerHTML = '<option value="all">Tất cả</option>';
 
             filtersContainer.querySelectorAll('select').forEach(el => el.addEventListener('change', applyFilters));
             document.getElementById('searchFilter').addEventListener('input', debouncedApplyFilters);
+            document.getElementById('searchIdFilter').addEventListener('input', debouncedApplyFilters);
             document.getElementById('fromDateFilter').addEventListener('input', formatDateInput);
             document.getElementById('toDateFilter').addEventListener('input', formatDateInput);
         }
         
-        function renderTableHeader() { document.getElementById('tasksTableHeader').innerHTML = TASK_FIELDS.map(h => `<th class="px-4 py-3">${h==='nguoiPhuTrach'?'Người phụ trách':h}</th>`).join('') + '<th class="px-4 py-3">Cảnh Báo</th>'; }
+        function renderTableHeader() { 
+            document.getElementById('tasksTableHeader').innerHTML = '<th class="px-4 py-3">ID</th>' + 
+            TASK_FIELDS.map(h => `<th class="px-4 py-3">${h==='nguoiPhuTrach'?'Người phụ trách':h}</th>`).join('') + 
+            '<th class="px-4 py-3">Ngày thay đổi cuối</th><th class="px-4 py-3">Cảnh Báo</th>';
+        }
+        
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return '';
+            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+            if (isNaN(date.getTime())) return '';
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${day}/${month}/${year} ${hours}:${minutes}`;
+        }
         
         function renderTable(data) {
             const tableBody = document.getElementById('tasksTableBody');
@@ -520,28 +561,43 @@
                 const row = document.createElement('tr');
                 row.className = `border-b border-slate-200 hover:bg-slate-50 ${warningInfo.bgColor||'bg-white'}`;
                 row.onclick = () => openTaskModal(task);
-                let cells = TASK_FIELDS.map(field => `<td class="px-4 py-2">${task[field]||''}</td>`).join('');
+                
+                let cells = `<td class="px-4 py-2 text-xs font-mono text-slate-500">${task.id || ''}</td>`;
+                cells += TASK_FIELDS.map(field => `<td class="px-4 py-2">${task[field]||''}</td>`).join('');
+                cells += `<td class="px-4 py-2 text-sm text-slate-500">${formatTimestamp(task.lastModified)}</td>`;
                 cells += `<td class="px-4 py-2">${warningInfo.label?`<span class="px-2 py-1 text-xs font-semibold rounded-full ${warningInfo.colorClass}">${warningInfo.label}</span>`:''}</td>`;
+                
                 row.innerHTML = cells;
                 tableBody.appendChild(row);
             });
         }
 
         function applyFilters() {
+            // Update assignee filter options
             const uniqueAssignees = [...new Set(tasksData.map(task => task.nguoiPhuTrach))].filter(Boolean).sort();
-            PREDEFINED_LISTS.nguoiPhuTrach = uniqueAssignees;
             const assigneeFilterEl = document.getElementById('assigneeFilter');
             const currentAssignee = assigneeFilterEl.value;
             assigneeFilterEl.innerHTML = '<option value="all">Tất cả</option>';
             uniqueAssignees.forEach(val => assigneeFilterEl.innerHTML += `<option value="${val}">${val}</option>`);
-            assigneeFilterEl.value = currentAssignee;
+            if (uniqueAssignees.includes(currentAssignee)) assigneeFilterEl.value = currentAssignee;
+            
+            // Update task type filter options
+            const predefinedTypes = PREDEFINED_LISTS['Loại công việc'] || [];
+            const dynamicTypes = tasksData.map(task => task['Loại công việc']).filter(Boolean);
+            const allTypes = [...new Set([...predefinedTypes, ...dynamicTypes])].sort();
+            const taskTypeFilterEl = document.getElementById('taskTypeFilter');
+            const currentTaskType = taskTypeFilterEl.value;
+            taskTypeFilterEl.innerHTML = '<option value="all">Tất cả</option>';
+            allTypes.forEach(val => taskTypeFilterEl.innerHTML += `<option value="${val}">${val}</option>`);
+            if(allTypes.includes(currentTaskType)) taskTypeFilterEl.value = currentTaskType;
 
-
+            // Read filter values
             const type = document.getElementById('taskTypeFilter').value;
             const assignee = document.getElementById('assigneeFilter').value;
             const coreStatus = document.getElementById('statusFilter').value;
             const warningStatus = document.getElementById('warningFilter').value;
             const searchTerm = document.getElementById('searchFilter').value.toLowerCase();
+            const searchId = document.getElementById('searchIdFilter').value.toLowerCase();
             const fromDateStr = document.getElementById('fromDateFilter').value;
             const toDateStr = document.getElementById('toDateFilter').value;
             const parseDate = (str) => { if (!str || str.length !== 10) return null; const parts = str.split('/'); return new Date(parts[2], parts[1] - 1, parts[0]); };
@@ -553,10 +609,10 @@
                 const typeMatch = type === 'all' || task['Loại công việc'] === type;
                 const assigneeMatch = assignee === 'all' || task['nguoiPhuTrach'] === assignee;
                 const searchMatch = (task['MST/NỘI DUNG'] || '').toLowerCase().includes(searchTerm);
+                const idMatch = !searchId || (task.id && task.id.toLowerCase().includes(searchId));
                 const coreStatusMatch = (coreStatus === 'all') || (coreStatus === 'Đã Hoàn Thành' && task['Trạng thái'] === 'Đã Hoàn Thành') || (coreStatus === 'Đang Thực Hiện' && task['Trạng thái'] !== 'Đã Hoàn Thành');
                 const warningMatch = (warningStatus === 'all') || (warningStatus === 'Không có' && !warningInfo.label && task['Trạng thái'] !== 'Đã Hoàn Thành') || (warningInfo.label === warningStatus);
                 
-                // --- UPDATED: Date range logic fix ---
                 let dateMatch = true; 
                 if (fromDate || toDate) {
                     const taskDate = parseDate(task['Ngày giao']);
@@ -569,7 +625,7 @@
                     }
                 }
 
-                return typeMatch && assigneeMatch && searchMatch && coreStatusMatch && warningMatch && dateMatch;
+                return typeMatch && assigneeMatch && searchMatch && coreStatusMatch && warningMatch && dateMatch && idMatch;
             });
             currentPage = 1;
             renderTable(filteredTasks);
@@ -582,18 +638,24 @@
             form.reset();
             const formContainer = form.querySelector('div.grid');
             formContainer.innerHTML = '';
+            
+            const allTaskTypes = [...new Set([...(PREDEFINED_LISTS['Loại công việc'] || []), ...(tasksData.map(t => t['Loại công việc']).filter(Boolean))])].sort();
+            
             TASK_FIELDS.forEach(field => {
                 const value = task ? task[field] : (field === 'nguoiPhuTrach' && currentUserProfile.role === 'member' ? currentUserProfile.name : '');
                 const div = document.createElement('div');
                 const displayName = field === 'nguoiPhuTrach' ? 'Người phụ trách' : field;
                 if (displayName.includes('NỘI DUNG') || displayName.includes('Ghi chú')) div.className = 'md:col-span-2';
                 let inputHtml;
-                if (PREDEFINED_LISTS[field]) {
-                    const options = PREDEFINED_LISTS[field].map(opt => `<option value="${opt}" ${opt===value?'selected':''}>${opt}</option>`).join('');
+
+                const currentList = field === 'Loại công việc' ? allTaskTypes : PREDEFINED_LISTS[field];
+
+                if (currentList) {
+                    const options = currentList.map(opt => `<option value="${opt}" ${opt===value?'selected':''}>${opt}</option>`).join('');
                     inputHtml = `<select id="field-${field}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2">${options}</select>`;
                 } else {
                     const isDate = displayName.includes('Ngày') || displayName.includes('Hạn');
-                    inputHtml = `<input type="text" id="field-${field}" value="${value}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2" ${isDate?'placeholder="dd/mm/yyyy"':''}>`;
+                    inputHtml = `<input type="text" id="field-${field}" value="${value||''}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2" ${isDate?'placeholder="dd/mm/yyyy"':''}>`;
                 }
                 div.innerHTML = `<label for="field-${field}" class="block text-sm font-medium">${displayName}</label>${inputHtml}`;
                 formContainer.appendChild(div);
@@ -637,7 +699,7 @@
                 debouncedApplyFilters();
             }
         }
-        function updateKPIs(data) { document.getElementById('kpis').innerHTML = `<div class="kpi-card section-card border-t-4 border-blue-500"><p class="text-sm text-slate-500">Tổng CV (đã tải)</p><p class="text-2xl font-bold">${data.length}</p></div><div class="kpi-card section-card border-t-4 border-green-500"><p class="text-sm text-slate-500">Hoàn thành</p><p class="text-2xl font-bold text-green-600">${data.filter(t=>t['Trạng thái']==='Đã Hoàn Thành').length}</p></div><div class="kpi-card section-card border-t-4 border-red-500"><p class="text-sm text-slate-500">Quá hạn</p><p class="text-2xl font-bold text-red-600">${data.filter(t=>getWarningStatus(t).label==='Quá Hạn').length}</p></div><div class="kpi-card section-card border-t-4 border-yellow-500"><p class="text-sm text-slate-500">Sắp đến hạn</p><p class="text-2xl font-bold text-yellow-600">${data.filter(t=>getWarningStatus(t).label==='Sắp đến hạn').length}</p></div>`; }
+        function updateKPIs(data) { document.getElementById('kpis').innerHTML = `<div class="kpi-card section-card border-t-4 border-blue-500"><p class="text-sm text-slate-500">Tổng CV (đã lọc)</p><p class="text-2xl font-bold">${data.length}</p></div><div class="kpi-card section-card border-t-4 border-green-500"><p class="text-sm text-slate-500">Hoàn thành</p><p class="text-2xl font-bold text-green-600">${data.filter(t=>t['Trạng thái']==='Đã Hoàn Thành').length}</p></div><div class="kpi-card section-card border-t-4 border-red-500"><p class="text-sm text-slate-500">Quá hạn</p><p class="text-2xl font-bold text-red-600">${data.filter(t=>getWarningStatus(t).label==='Quá Hạn').length}</p></div><div class="kpi-card section-card border-t-4 border-yellow-500"><p class="text-sm text-slate-500">Sắp đến hạn</p><p class="text-2xl font-bold text-yellow-600">${data.filter(t=>getWarningStatus(t).label==='Sắp đến hạn').length}</p></div>`; }
         function updateCharts(data) {
             const chartsContainer = document.getElementById('charts');
             chartsContainer.innerHTML = `<div class="section-card"><h3 class="text-lg font-semibold text-center mb-4 text-slate-700">Tỷ lệ Trạng thái</h3><div class="chart-container"><canvas id="statusChart"></canvas></div></div><div class="section-card"><h3 class="text-lg font-semibold text-center mb-4 text-slate-700">Khối lượng Công việc</h3><div class="chart-container"><canvas id="workloadChart"></canvas></div></div><div class="section-card md:col-span-2 lg:col-span-1"><h3 class="text-lg font-semibold text-center mb-4 text-slate-700">Tình trạng theo Loại CV</h3><div class="chart-container"><canvas id="taskTypeStatusChart"></canvas></div></div>`;
@@ -651,9 +713,9 @@
             const statusCounts = ALL_STATUSES.reduce((a, s) => ({...a, [s]: 0}), {});
             data.forEach(t => { const s = getOverallStatus(t); if (s in statusCounts) statusCounts[s]++; });
             statusChart = new Chart('statusChart', { type: 'doughnut', data: { labels: ALL_STATUSES, datasets: [{ data: ALL_STATUSES.map(s => statusCounts[s]), backgroundColor: ALL_STATUSES.map(s => CORE_STATUSES[s]) }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }, datalabels: DATALABELS_CONFIG } } });
-            const assignees = PREDEFINED_LISTS.nguoiPhuTrach;
+            const assignees = [...new Set(tasksData.map(t => t.nguoiPhuTrach))].filter(Boolean).sort();
             workloadChart = new Chart('workloadChart', { type: 'bar', data: { labels: assignees, datasets: ALL_STATUSES.map(s => ({ label: s, data: assignees.map(a => data.filter(t => t['nguoiPhuTrach'] === a && getOverallStatus(t) === s).length), backgroundColor: CORE_STATUSES[s] })) }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } }, plugins: { legend: { position: 'bottom' }, datalabels: DATALABELS_CONFIG } } });
-            const taskTypes = [...new Set(tasksData.map(t => t['Loại công việc']))].filter(Boolean);
+            const taskTypes = [...new Set(data.map(t => t['Loại công việc']))].filter(Boolean);
             taskTypeStatusChart = new Chart('taskTypeStatusChart', { type: 'bar', data: { labels: taskTypes, datasets: ALL_STATUSES.map(s => ({ label: s, data: taskTypes.map(type => data.filter(t => t['Loại công việc'] === type && getOverallStatus(t) === s).length), backgroundColor: CORE_STATUSES[s] })) }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } }, plugins: { legend: { position: 'bottom' }, datalabels: DATALABELS_CONFIG } } });
         }
         function renderPaginationControls() {
@@ -703,20 +765,24 @@
                 const missingHeaders = displayHeaders.filter(f => !headers.includes(f));
                 if (missingHeaders.length > 0) { alert(`File Excel thiếu các cột sau: ${missingHeaders.join(', ')}`); return; }
                 const batch = db.batch();
+                const newTasksForLocal = [];
                 jsonData.forEach(row => {
                     const newTask = {};
                     TASK_FIELDS.forEach(field => { const displayName = field === 'nguoiPhuTrach' ? 'Người phụ trách' : field; newTask[field] = row[displayName] || ''; });
                     newTask.createdBy = auth.currentUser.email;
                     newTask.createdAt = new Date();
+                    newTask.lastModified = new Date();
+                    newTasksForLocal.push(newTask);
                     const docRef = db.collection("tasks").doc();
                     batch.set(docRef, newTask);
                 });
                 await batch.commit();
-                alert(`Đã nhập thành công ${jsonData.length} công việc!`);
-                location.reload();
+                tasksData.unshift(...newTasksForLocal);
+                applyFilters();
+                showNotification(`Đã nhập thành công ${jsonData.length} công việc!`);
             } catch (error) {
                 console.error("Error importing from Excel:", error);
-                alert("Có lỗi xảy ra khi nhập file.");
+                showNotification("Có lỗi xảy ra khi nhập file.", true);
             } finally {
                 event.target.value = '';
             }
@@ -783,10 +849,10 @@
                 
                 renderAdminSection(); 
                 
-                alert(`Đã cập nhật quyền cho người dùng thành "${newRole}"!`);
+                showNotification(`Đã cập nhật quyền cho người dùng thành "${newRole}"!`);
             } catch (error) {
                 console.error("Error updating user role:", error);
-                alert('Có lỗi xảy ra khi cập nhật quyền.');
+                showNotification('Có lỗi xảy ra khi cập nhật quyền.', true);
             }
         }
 
@@ -798,10 +864,10 @@
                 await db.collection('users').doc(userId).delete();
                 allUsersData = allUsersData.filter(u => u.id !== userId);
                 renderAdminSection();
-                alert('Đã từ chối và xóa người dùng.');
+                showNotification('Đã từ chối và xóa người dùng.');
             } catch (error) {
                 console.error("Error rejecting user:", error);
-                alert('Có lỗi xảy ra khi từ chối người dùng.');
+                showNotification('Có lỗi xảy ra khi từ chối người dùng.', true);
             }
         }
         
@@ -810,5 +876,3 @@
     </script>
 </body>
 </html>
-"
-
