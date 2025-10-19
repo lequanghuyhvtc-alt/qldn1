@@ -226,9 +226,12 @@
 
                 document.getElementById('userName').textContent = currentUserProfile.name;
                 
+                // Tải dữ liệu tất cả người dùng cho mọi vai trò (cần cho bộ lọc "Người phụ trách")
+                const usersSnapshot = await getDocs(collection(db, "users"));
+                allUsersData = usersSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                // Chỉ hiển thị khu vực admin cho leader
                 if (currentUserProfile.role === 'leader') {
-                    const usersSnapshot = await getDocs(collection(db, "users"));
-                    allUsersData = usersSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
                     renderAdminSection();
                 }
 
@@ -266,6 +269,12 @@
             document.getElementById('closeWelcomeButton').addEventListener('click', closeWelcomeModal);
             document.getElementById('cancelTaskButton').addEventListener('click', closeTaskModal);
             document.getElementById('logoutButton').addEventListener('click', () => signOut(auth));
+            
+            // Add event listener for the admin section if it exists
+            const pendingList = document.getElementById('pendingUsersList');
+            if (pendingList) {
+                pendingList.addEventListener('click', handleAdminActions);
+            }
 
             renderTableHeader();
             populateFilters(); 
@@ -407,7 +416,6 @@
             const filtersContainer = document.getElementById('filters');
             filtersContainer.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"><div><label class="block text-sm font-medium text-slate-600 mb-1">Loại công việc</label><select id="taskTypeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Người phụ trách</label><select id="assigneeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Trạng thái</label><select id="statusFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Đã Hoàn Thành">Đã Hoàn Thành</option><option value="Đang Thực Hiện">Đang Thực Hiện</option></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Cảnh Báo</label><select id="warningFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Quá Hạn">Quá Hạn</option><option value="Sắp đến hạn">Sắp đến hạn</option><option value="Không có">Không có</option></select></div></div><div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div><label for="searchMstFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm MST</label><input type="text" id="searchMstFilter" placeholder="Nhập MST..." class="w-full p-2 border rounded-lg"></div><div><label for="searchNntFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm Tên NNT</label><input type="text" id="searchNntFilter" placeholder="Nhập tên NNT..." class="w-full p-2 border rounded-lg"></div><div><label for="searchIdFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm theo ID</label><input type="text" id="searchIdFilter" placeholder="Nhập ID công việc..." class="w-full p-2 border rounded-lg"></div><div class="self-end"><button id="searchButton" class="w-full px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition-colors">Lọc / Tìm kiếm</button></div></div>`;
             
-            // Note: Filters are now populated from allUsersData, not by querying tasks again.
             const uniqueAssignees = [...new Set(allUsersData.filter(u => u.role !== 'pending').map(u => u.name))].sort();
             const assigneeFilterEl = document.getElementById('assigneeFilter');
             assigneeFilterEl.innerHTML = '<option value="all">Tất cả</option>' + uniqueAssignees.map(o => `<option value="${o}">${o}</option>`).join('');
@@ -493,9 +501,22 @@
                 showNotification("Xóa công việc thất bại.", true);
             }
         }
-
+        
         // --- ADMIN FUNCTIONS ---
-        // (No changes needed for these functions)
+        function handleAdminActions(e) {
+            const target = e.target;
+            const userId = target.dataset.userid;
+            if (!userId) return;
+
+            if (target.classList.contains('update-role-btn')) {
+                const selectEl = document.querySelector(`#pending-user-${userId} .role-select`);
+                const newRole = selectEl.value;
+                updateUserRole(userId, newRole);
+            } else if (target.classList.contains('reject-user-btn')) {
+                rejectUser(userId);
+            }
+        }
+
         function renderAdminSection() {
             const adminSection = document.getElementById('adminSection');
             const pendingList = document.getElementById('pendingUsersList');
@@ -510,19 +531,54 @@
                 const userDiv = document.createElement('div');
                 userDiv.className = 'flex items-center justify-between p-3 bg-slate-50 rounded-lg';
                 userDiv.id = `pending-user-${user.id}`;
-                userDiv.innerHTML = `<di ... > ... </div>`; // content kept short for brevity
+                userDiv.innerHTML = `
+                    <div>
+                        <p class="font-semibold text-slate-800">${user.name}</p>
+                        <p class="text-sm text-slate-500">${user.email}</p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <select data-userid="${user.id}" class="role-select bg-white border border-slate-300 rounded-md shadow-sm p-1.5 text-sm">
+                            <option value="member">Member</option>
+                            <option value="leader">Leader</option>
+                        </select>
+                        <button data-userid="${user.id}" class="update-role-btn px-3 py-1 text-sm bg-blue-100 text-blue-700 font-semibold rounded-md hover:bg-blue-200">Cập nhật</button>
+                        <button data-userid="${user.id}" class="reject-user-btn px-3 py-1 text-sm bg-red-100 text-red-700 font-semibold rounded-md hover:bg-red-200">Từ chối</button>
+                    </div>
+                `;
                 pendingList.appendChild(userDiv);
             });
-
-            // ... (event listeners for admin buttons) ...
             adminSection.classList.remove('hidden');
         }
-        async function updateUserRole(userId, newRole) { /* ... */ }
-        async function rejectUser(userId) { /* ... */ }
+
+        async function updateUserRole(userId, newRole) {
+            try {
+                await setDoc(doc(db, "users", userId), { role: newRole }, { merge: true });
+                const userIndex = allUsersData.findIndex(u => u.id === userId);
+                if (userIndex > -1) {
+                    allUsersData[userIndex].role = newRole;
+                }
+                renderAdminSection(); // Re-render the list of pending users
+                showNotification(`Đã cập nhật quyền cho người dùng thành "${newRole}"!`);
+            } catch (error) {
+                console.error("Error updating user role:", error);
+                showNotification('Có lỗi xảy ra khi cập nhật quyền.', true);
+            }
+        }
+
+        async function rejectUser(userId) {
+            if (!confirm('Bạn có chắc chắn muốn từ chối và xóa người dùng này không?')) return;
+            try {
+                await deleteDoc(doc(db, "users", userId));
+                allUsersData = allUsersData.filter(u => u.id !== userId);
+                renderAdminSection(); // Re-render the list
+                showNotification('Đã từ chối và xóa người dùng.');
+            } catch (error) {
+                console.error("Error rejecting user:", error);
+                showNotification('Có lỗi xảy ra khi từ chối người dùng.', true);
+            }
+        }
         
         // --- UTILITY, UI, AND EXPORT/IMPORT FUNCTIONS ---
-        // (Most of these functions remain unchanged, only exportToExcel is slightly modified)
-
         function renderTableHeader() { 
             document.getElementById('tasksTableHeader').innerHTML = '<th class="px-4 py-3">ID</th>' + 
             TASK_FIELDS.map(h => `<th class="px-4 py-3">${h==='nguoiPhuTrach'?'Người phụ trách':h}</th>`).join('') + 
@@ -579,14 +635,109 @@
             popup.classList.add('opacity-100', 'translate-y-0');
             setTimeout(() => { popup.classList.add('opacity-0'); popup.classList.remove('opacity-100'); setTimeout(() => popup.classList.add('hidden', 'translate-y-4'), 300); }, 4000);
         }
-        function setupAuthFormListeners() { /* ... unchanged ... */ }
-        function resetAuthFormUI() { /* ... unchanged ... */ }
-        function openTaskModal(task = null) { /* ... unchanged ... */ }
-        function closeTaskModal() { document.getElementById('taskModal').classList.add('hidden'); }
-        function closeWelcomeModal() { /* ... unchanged ... */ }
-        function downloadTemplate() { /* ... unchanged ... */ }
         
-        // Export now uses the client-side filtered data
+        function setupAuthFormListeners() {
+            const loginForm = document.getElementById('loginForm');
+            const toggleFormLink = document.getElementById('toggleForm');
+
+            loginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const email = document.getElementById('emailInput').value;
+                const password = document.getElementById('passwordInput').value;
+                
+                if (isLogin) {
+                    signInWithEmailAndPassword(auth, email, password).catch(error => {
+                        alert("Sai email hoặc mật khẩu.");
+                    });
+                } else {
+                    const name = document.getElementById('nameInput').value;
+                    if (!name) { alert("Vui lòng nhập họ và tên."); return; }
+                    createUserWithEmailAndPassword(auth, email, password)
+                        .then(userCredential => setDoc(doc(db, "users", userCredential.user.uid), { name: name, email: email, role: 'pending' }))
+                        .then(() => {
+                            alert("Đăng ký thành công! Tài khoản của bạn đang chờ quản trị viên phê duyệt.");
+                            signOut(auth);
+                        })
+                        .catch(error => alert(error.code === 'auth/email-already-in-use' ? "Email này đã được sử dụng." : "Đã có lỗi xảy ra."));
+                }
+            });
+
+            toggleFormLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                isLogin = !isLogin;
+                const nameInput = document.getElementById('nameInput');
+                nameInput.classList.toggle('hidden', isLogin);
+                nameInput.required = !isLogin;
+                document.getElementById('form-title').textContent = isLogin ? 'Đăng nhập' : 'Tạo tài khoản';
+                loginForm.querySelector('button').textContent = isLogin ? 'Đăng nhập' : 'Đăng ký';
+                toggleFormLink.textContent = isLogin ? 'Chưa có tài khoản? Đăng ký' : 'Đã có tài khoản? Đăng nhập';
+            });
+        }
+        function resetAuthFormUI() {
+            isLogin = true;
+            document.getElementById('nameInput').classList.add('hidden');
+            document.getElementById('nameInput').required = false;
+            document.getElementById('form-title').textContent = 'Đăng nhập để tiếp tục';
+            document.getElementById('loginForm').querySelector('button').textContent = 'Đăng nhập';
+            document.getElementById('toggleForm').textContent = 'Chưa có tài khoản? Đăng ký';
+            document.getElementById('loginForm').reset();
+        }
+        function openTaskModal(task = null) {
+            const form = document.getElementById('taskForm');
+            form.reset();
+            const formContainer = form.querySelector('div.grid');
+            formContainer.innerHTML = '';
+            
+            TASK_FIELDS.forEach(field => {
+                const value = task ? task[field] : (field === 'nguoiPhuTrach' && currentUserProfile.role === 'member' ? currentUserProfile.name : '');
+                const div = document.createElement('div');
+                const displayName = field === 'nguoiPhuTrach' ? 'Người phụ trách' : field;
+                if (displayName.includes('Tên NNT') || displayName.includes('Ghi chú')) div.className = 'md:col-span-2';
+                
+                let inputHtml;
+                const allAssignees = allUsersData.filter(u => u.role !== 'pending').map(u => u.name);
+                let currentList;
+                if (field === 'Loại công việc') currentList = PREDEFINED_LISTS['Loại công việc'];
+                else if (field === 'nguoiPhuTrach') currentList = allAssignees;
+                else if(PREDEFINED_LISTS[field]) currentList = PREDEFINED_LISTS[field];
+
+
+                if (field === 'nguoiPhuTrach' && currentUserProfile.role === 'member') {
+                    inputHtml = `<input type="text" id="field-${field}" value="${value || ''}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2 bg-slate-100" readonly>`;
+                } else if (currentList) {
+                    const options = currentList.map(opt => `<option value="${opt}" ${opt === value ? 'selected' : ''}>${opt}</option>`).join('');
+                    inputHtml = `<select id="field-${field}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2"><option value="">-- Chọn --</option>${options}</select>`;
+                } else {
+                    const isDate = displayName.includes('Ngày') || displayName.includes('Hạn');
+                    inputHtml = `<input type="text" id="field-${field}" value="${value || ''}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2" ${isDate ? 'placeholder="dd/mm/yyyy"' : ''}>`;
+                }
+
+                div.innerHTML = `<label for="field-${field}" class="block text-sm font-medium">${displayName}</label>${inputHtml}`;
+                formContainer.appendChild(div);
+            });
+
+            document.getElementById('modalTitle').textContent = task ? 'Chỉnh sửa Công Việc' : 'Thêm Công Việc Mới';
+            document.getElementById('taskId').value = task ? task.id : '';
+            const deleteButton = document.getElementById('deleteTaskButton');
+            deleteButton.style.display = task && currentUserProfile.role === 'leader' ? 'block' : 'none';
+            deleteButton.onclick = deleteTask;
+            document.getElementById('taskModal').classList.remove('hidden');
+        }
+        function closeTaskModal() { document.getElementById('taskModal').classList.add('hidden'); }
+        function closeWelcomeModal() {
+            const modal = document.getElementById('welcomeModal');
+            const modalContent = document.getElementById('welcomeModalContent');
+            modalContent.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => { modal.classList.add('hidden'); }, 300);
+        }
+        function downloadTemplate() { 
+            const displayHeaders = TASK_FIELDS.map(f => f === 'nguoiPhuTrach' ? 'Người phụ trách' : f); 
+            const worksheet = XLSX.utils.aoa_to_sheet([displayHeaders]); 
+            const workbook = XLSX.utils.book_new(); 
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Tasks'); 
+            XLSX.writeFile(workbook, "Mau_Nhap_Cong_Viec.xlsx"); 
+        }
+        
         function exportToExcel() {
             showNotification("Đang chuẩn bị dữ liệu để xuất file...");
             if (filteredTasksData.length === 0) {
@@ -605,21 +756,89 @@
         async function importFromExcel(event) {
             const file = event.target.files[0];
             if (!file) return;
-            // ... (Import logic remains the same, but refreshes data at the end) ...
+
+            let successfulImports = 0;
+            let jsonData = [];
+            
             try {
-                // ... logic to read and process excel file ...
+                showNotification("Đang đọc file Excel...");
+                const data = await file.arrayBuffer();
+                const workbook = XLSX.read(data);
+                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+
+                if (jsonData.length === 0) {
+                    showNotification("File Excel rỗng hoặc không có dữ liệu.", true);
+                    return;
+                }
+
+                const headers = Object.keys(jsonData[0]);
+                const mandatoryHeaders = ['Loại công việc', 'MST', 'Người phụ trách'];
+                const missingHeaders = mandatoryHeaders.filter(h => !headers.includes(h));
+
+                if (missingHeaders.length > 0) {
+                    alert(`File Excel của bạn thiếu các cột bắt buộc sau: ${missingHeaders.join(', ')}`);
+                    return;
+                }
+
+                showNotification(`Đã tìm thấy ${jsonData.length} công việc. Bắt đầu kiểm tra và nhập...`);
                 const batch = writeBatch(db);
-                // ... forEach row, batch.set(...) ...
+                let failedRows = [];
+                
+                jsonData.forEach((row, index) => {
+                    const loaiCongViec = row['Loại công việc'];
+                    const mst = row['MST'];
+                    const nguoiPhuTrach = row['Người phụ trách'];
+
+                    if (!loaiCongViec || !mst || !nguoiPhuTrach) {
+                        failedRows.push(index + 2);
+                        return;
+                    }
+
+                    const newTask = {};
+                    TASK_FIELDS.forEach(field => {
+                        const displayName = (field === 'nguoiPhuTrach' ? 'Người phụ trách' : field);
+                        if (row.hasOwnProperty(displayName)) {
+                            if ((field === 'Ngày giao' || field === 'Hạn xử lý') && typeof row[displayName] === 'number') {
+                                const jsDate = new Date(Math.round((row[displayName] - 25569) * 86400 * 1000));
+                                const day = String(jsDate.getDate()).padStart(2, '0');
+                                const month = String(jsDate.getMonth() + 1).padStart(2, '0');
+                                const year = jsDate.getFullYear();
+                                newTask[field] = `${day}/${month}/${year}`;
+                            } else {
+                                newTask[field] = row[displayName] || '';
+                            }
+                        } else {
+                            newTask[field] = '';
+                        }
+                    });
+                    
+                    newTask.createdBy = auth.currentUser.email;
+                    newTask.modifiedBy = auth.currentUser.email;
+                    newTask.createdAt = serverTimestamp();
+                    newTask.lastModified = serverTimestamp();
+
+                    const docRef = doc(collection(db, "tasks"));
+                    batch.set(docRef, newTask);
+                    successfulImports++;
+                });
+
+                if (failedRows.length > 0) {
+                    alert(`Lưu ý: ${failedRows.length} dòng đã bị bỏ qua do thiếu dữ liệu ở các cột bắt buộc (Loại công việc, MST, Người phụ trách).\nCác dòng bị lỗi: ${failedRows.join(', ')}`);
+                }
 
                 if (successfulImports > 0) {
                     await batch.commit();
-                    // Refresh data and re-render
                     await fetchDataFromFirestore();
                     applyFiltersAndRender();
                     showNotification(`Đã nhập thành công ${successfulImports} / ${jsonData.length} công việc!`);
+                } else if (failedRows.length > 0) {
+                     showNotification("Không có công việc hợp lệ nào được nhập. Vui lòng kiểm tra lại file.", true);
                 }
-            } catch(e) {
-                //...
+
+            } catch (error) {
+                console.error("Lỗi khi nhập từ Excel:", error);
+                showNotification("Có lỗi xảy ra khi nhập file.", true);
             } finally {
                 event.target.value = '';
             }
@@ -630,3 +849,4 @@
     </script>
 </body>
 </html>
+
