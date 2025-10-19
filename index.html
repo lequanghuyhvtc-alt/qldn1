@@ -815,7 +815,7 @@
 
                 if (successfulImports > 0) {
                     await batch.commit();
-                    await fetchAndRenderTasks('initial');
+                    await fetchAllData();
                     showNotification(`Đã nhập thành công ${successfulImports} / ${jsonData.length} công việc!`);
                 } else if (failedRows.length > 0) {
                      showNotification("Không có công việc hợp lệ nào được nhập. Vui lòng kiểm tra lại file.", true);
