@@ -734,33 +734,67 @@
         async function importFromExcel(event) {
             const file = event.target.files[0];
             if (!file) return;
+
             try {
                 showNotification("Đang đọc file Excel...");
                 const data = await file.arrayBuffer();
                 const workbook = XLSX.read(data);
                 const worksheet = workbook.Sheets[workbook.SheetNames[0]];
                 const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
-                if (jsonData.length === 0) { showNotification("File Excel rỗng.", true); return; }
-                const headers = Object.keys(jsonData[0]);
-                const displayHeaders = TASK_FIELDS.map(f => (f === 'nguoiPhuTrach' ? 'Người phụ trách' : f));
-                const missingHeaders = displayHeaders.filter(f => !headers.includes(f));
-                if (missingHeaders.length > 0) { alert(`File Excel thiếu cột: ${missingHeaders.join(', ')}`); return; }
 
-                showNotification(`Đã tìm thấy ${jsonData.length} công việc. Bắt đầu nhập...`);
+                if (jsonData.length === 0) {
+                    showNotification("File Excel rỗng hoặc không có dữ liệu.", true);
+                    return;
+                }
+
+                // --- BẮT ĐẦU: LOGIC VALIDATION ĐÃ SỬA ---
+
+                // 1. Chỉ kiểm tra các cột (header) bắt buộc
+                const headers = Object.keys(jsonData[0]);
+                const mandatoryHeaders = ['Loại công việc', 'MST', 'Người phụ trách'];
+                const missingHeaders = mandatoryHeaders.filter(h => !headers.includes(h));
+
+                if (missingHeaders.length > 0) {
+                    alert(`File Excel của bạn thiếu các cột bắt buộc sau: ${missingHeaders.join(', ')}`);
+                    return;
+                }
+
+                showNotification(`Đã tìm thấy ${jsonData.length} công việc. Bắt đầu kiểm tra và nhập...`);
                 const batch = writeBatch(db);
+                let successfulImports = 0;
+                let failedRows = [];
                 
-                jsonData.forEach(row => {
+                // 2. Kiểm tra dữ liệu bắt buộc trên từng dòng
+                jsonData.forEach((row, index) => {
+                    const loaiCongViec = row['Loại công việc'];
+                    const mst = row['MST'];
+                    const nguoiPhuTrach = row['Người phụ trách'];
+
+                    // Nếu dữ liệu bắt buộc bị thiếu, bỏ qua dòng này
+                    if (!loaiCongViec || !mst || !nguoiPhuTrach) {
+                        failedRows.push(index + 2); // +2 vì index bắt đầu từ 0 và dòng 1 là header
+                        return; // Chuyển sang vòng lặp tiếp theo
+                    }
+
                     const newTask = {};
                     TASK_FIELDS.forEach(field => {
                         const displayName = (field === 'nguoiPhuTrach' ? 'Người phụ trách' : field);
-                        if ((field === 'Ngày giao' || field === 'Hạn xử lý') && typeof row[displayName] === 'number') {
-                            const jsDate = new Date(Math.round((row[displayName] - 25569) * 86400 * 1000));
-                            const day = String(jsDate.getDate()).padStart(2, '0');
-                            const month = String(jsDate.getMonth() + 1).padStart(2, '0');
-                            const year = jsDate.getFullYear();
-                            newTask[field] = `${day}/${month}/${year}`;
+                        
+                        // Kiểm tra xem cột có tồn tại trong dòng không để tránh lỗi với các cột tùy chọn
+                        if (row.hasOwnProperty(displayName)) {
+                            // Xử lý chuyển đổi ngày tháng từ định dạng số của Excel
+                            if ((field === 'Ngày giao' || field === 'Hạn xử lý') && typeof row[displayName] === 'number') {
+                                const jsDate = new Date(Math.round((row[displayName] - 25569) * 86400 * 1000));
+                                const day = String(jsDate.getDate()).padStart(2, '0');
+                                const month = String(jsDate.getMonth() + 1).padStart(2, '0');
+                                const year = jsDate.getFullYear();
+                                newTask[field] = `${day}/${month}/${year}`;
+                            } else {
+                                newTask[field] = row[displayName] || '';
+                            }
                         } else {
-                            newTask[field] = row[displayName] || '';
+                            // Nếu cột tùy chọn bị thiếu, gán giá trị rỗng
+                            newTask[field] = '';
                         }
                     });
                     
@@ -771,11 +805,23 @@
 
                     const docRef = doc(collection(db, "tasks"));
                     batch.set(docRef, newTask);
+                    successfulImports++;
                 });
 
-                await batch.commit();
-                await fetchAllData(); // **MODIFIED**: Refresh all data
-                showNotification(`Đã nhập thành công ${jsonData.length} công việc!`);
+                // 3. Cung cấp thông báo phản hồi cho người dùng
+                if (failedRows.length > 0) {
+                    alert(`Lưu ý: ${failedRows.length} dòng đã bị bỏ qua do thiếu dữ liệu ở các cột bắt buộc (Loại công việc, MST, Người phụ trách).\nCác dòng bị lỗi: ${failedRows.join(', ')}`);
+                }
+
+                if (successfulImports > 0) {
+                    await batch.commit();
+                    await fetchAndRenderTasks('initial');
+                    showNotification(`Đã nhập thành công ${successfulImports} / ${jsonData.length} công việc!`);
+                } else if (failedRows.length > 0) {
+                     showNotification("Không có công việc hợp lệ nào được nhập. Vui lòng kiểm tra lại file.", true);
+                }
+
+                // --- KẾT THÚC: LOGIC VALIDATION ĐÃ SỬA ---
 
             } catch (error) {
                 console.error("Lỗi khi nhập từ Excel:", error);
