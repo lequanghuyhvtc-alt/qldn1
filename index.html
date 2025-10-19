@@ -300,6 +300,7 @@
             }
         }
 
+        // ***** BẮT ĐẦU: HÀM ĐÃ CẬP NHẬT TÌM KIẾM SERVER-SIDE *****
         async function fetchAndRenderTasks(direction) {
             document.getElementById('table-loader').classList.remove('hidden');
             document.getElementById('tasksTableBody').innerHTML = '';
@@ -307,16 +308,24 @@
             
             try {
                 const queryConstraints = []; 
-                const baseConstraints = []; // Giữ các bộ lọc cơ bản để dùng cho analytics
+                const baseConstraints = []; 
 
                 if (currentUserProfile && currentUserProfile.role === 'member') {
                     baseConstraints.push(where("nguoiPhuTrach", "==", currentUserProfile.name));
                 }
 
+                // Lấy giá trị từ các bộ lọc
                 const type = document.getElementById('taskTypeFilter').value;
                 const assignee = document.getElementById('assigneeFilter').value;
                 const coreStatus = document.getElementById('statusFilter').value;
+                const warningStatus = document.getElementById('warningFilter').value;
+
+                // Lấy giá trị tìm kiếm từ các ô input
+                const searchMst = document.getElementById('searchMstFilter').value;
+                const searchNnt = document.getElementById('searchNntFilter').value;
+                const searchId = document.getElementById('searchIdFilter').value.toLowerCase();
                 
+                // Áp dụng bộ lọc cơ bản
                 if (type !== 'all') baseConstraints.push(where('Loại công việc', '==', type));
                 if (assignee !== 'all') baseConstraints.push(where('nguoiPhuTrach', '==', assignee));
                 if (coreStatus !== 'all') {
@@ -326,16 +335,31 @@
                        baseConstraints.push(where('Trạng thái', '==', coreStatus));
                     }
                 }
+                
+                // Thêm điều kiện tìm kiếm MST hoặc Tên NNT vào câu truy vấn
+                // Sử dụng kỹ thuật truy vấn tiền tố (prefix query)
+                if (searchMst) {
+                     baseConstraints.push(where('MST', '>=', searchMst));
+                     baseConstraints.push(where('MST', '<=', searchMst + '\uf8ff'));
+                }
+                if (searchNnt) {
+                     baseConstraints.push(where('Tên NNT', '>=', searchNnt));
+                     baseConstraints.push(where('Tên NNT', '<=', searchNnt + '\uf8ff'));
+                }
 
                 queryConstraints.push(...baseConstraints);
+                // Lưu ý: orderBy phải khớp với trường đầu tiên trong where() bất bình đẳng (>=, <=)
+                if (searchMst) {
+                    queryConstraints.push(orderBy("MST", "asc"));
+                } else if (searchNnt) {
+                    queryConstraints.push(orderBy("Tên NNT", "asc"));
+                }
                 queryConstraints.push(orderBy("createdAt", "desc"));
 
-                // Cập nhật analytics chỉ khi filter thay đổi (trang đầu tiên)
                 if (direction === 'initial') {
                     await updateAnalytics(baseConstraints);
                 }
                 
-                // Áp dụng phân trang cho query chính
                 if (direction === 'next' && lastVisibleDoc) {
                     queryConstraints.push(startAfter(lastVisibleDoc));
                     currentPage++;
@@ -343,10 +367,19 @@
                     currentPage = Math.max(1, currentPage - 1);
                     const prevQuery = query(collection(db, "tasks"), ...queryConstraints, endBefore(firstVisibleDoc), limitToLast(PAGE_SIZE));
                     const prevSnapshot = await getDocs(prevQuery);
-                    const tasks = prevSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                    let tasks = prevSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
                     firstVisibleDoc = prevSnapshot.docs[0] || null;
                     lastVisibleDoc = prevSnapshot.docs[prevSnapshot.docs.length - 1] || null;
-                    renderClientSideFiltered(tasks);
+                    
+                    // Lọc client-side cho ID và Cảnh báo sau khi đã lấy dữ liệu
+                    tasks = tasks.filter(task => {
+                        const idMatch = !searchId || (task.id && task.id.toLowerCase().includes(searchId));
+                        const warningInfo = getWarningStatus(task);
+                        const warningMatch = (warningStatus === 'all') || (warningStatus === 'Không có' && !warningInfo.label && task['Trạng thái'] !== 'Đã Hoàn Thành') || (warningInfo.label === warningStatus);
+                        return idMatch && warningMatch;
+                    });
+
+                    renderTable(tasks);
                     renderPaginationControls(prevSnapshot.size);
                     return;
                 } else { 
@@ -357,12 +390,20 @@
                 
                 const finalQuery = query(collection(db, "tasks"), ...queryConstraints, limit(PAGE_SIZE));
                 const snapshot = await getDocs(finalQuery);
-                const tasks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                let tasks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 
                 firstVisibleDoc = snapshot.docs[0] || null;
                 lastVisibleDoc = snapshot.docs[snapshot.docs.length - 1] || null;
 
-                renderClientSideFiltered(tasks);
+                // Lọc client-side cho ID và Cảnh báo sau khi đã lấy dữ liệu
+                tasks = tasks.filter(task => {
+                    const idMatch = !searchId || (task.id && task.id.toLowerCase().includes(searchId));
+                    const warningInfo = getWarningStatus(task);
+                    const warningMatch = (warningStatus === 'all') || (warningStatus === 'Không có' && !warningInfo.label && task['Trạng thái'] !== 'Đã Hoàn Thành') || (warningInfo.label === warningStatus);
+                    return idMatch && warningMatch;
+                });
+                
+                renderTable(tasks);
                 renderPaginationControls(snapshot.size);
 
             } catch (error) {
@@ -374,23 +415,7 @@
                 document.getElementById('table-loader').classList.add('hidden');
             }
         }
-        
-        function renderClientSideFiltered(tasks) {
-            const searchMst = document.getElementById('searchMstFilter').value.toLowerCase();
-            const searchNnt = document.getElementById('searchNntFilter').value.toLowerCase();
-            const searchId = document.getElementById('searchIdFilter').value.toLowerCase();
-            const warningStatus = document.getElementById('warningFilter').value;
-
-            const clientFilteredTasks = tasks.filter(task => {
-                const mstMatch = !searchMst || (task['MST'] || '').toLowerCase().includes(searchMst);
-                const nntMatch = !searchNnt || (task['Tên NNT'] || '').toLowerCase().includes(searchNnt);
-                const idMatch = !searchId || (task.id && task.id.toLowerCase().includes(searchId));
-                const warningInfo = getWarningStatus(task);
-                const warningMatch = (warningStatus === 'all') || (warningStatus === 'Không có' && !warningInfo.label && task['Trạng thái'] !== 'Đã Hoàn Thành') || (warningInfo.label === warningStatus);
-                return mstMatch && nntMatch && idMatch && warningMatch;
-            });
-            renderTable(clientFilteredTasks);
-        }
+        // ***** KẾT THÚC: HÀM ĐÃ CẬP NHẬT TÌM KIẾM SERVER-SIDE *****
 
         // --- CÁC HÀM HIỂN THỊ (RENDER) ---
         function renderTable(data) {
@@ -433,11 +458,12 @@
         // --- BỘ LỌC VÀ SỰ KIỆN ---
         async function populateFilters() {
              const filtersContainer = document.getElementById('filters');
-            filtersContainer.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"><div><label class="block text-sm font-medium text-slate-600 mb-1">Loại công việc</label><select id="taskTypeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Người phụ trách</label><select id="assigneeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Trạng thái</label><select id="statusFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Đã Hoàn Thành">Đã Hoàn Thành</option><option value="Đang Thực Hiện">Đang Thực Hiện</option></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Cảnh Báo</label><select id="warningFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Quá Hạn">Quá Hạn</option><option value="Sắp đến hạn">Sắp đến hạn</option><option value="Không có">Không có</option></select></div></div><div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div><label for="searchMstFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm MST</label><input type="text" id="searchMstFilter" placeholder="Nhập MST..." class="w-full p-2 border rounded-lg"></div><div><label for="searchNntFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm Tên NNT</label><input type="text" id="searchNntFilter" placeholder="Nhập tên NNT..." class="w-full p-2 border rounded-lg"></div><div><label for="searchIdFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm theo ID</label><input type="text" id="searchIdFilter" placeholder="Nhập ID công việc..." class="w-full p-2 border rounded-lg"></div></div>`;
+            // ***** BẮT ĐẦU: CẬP NHẬT HTML BỘ LỌC VỚI NÚT TÌM KIẾM *****
+            filtersContainer.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"><div><label class="block text-sm font-medium text-slate-600 mb-1">Loại công việc</label><select id="taskTypeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Người phụ trách</label><select id="assigneeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Trạng thái</label><select id="statusFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Đã Hoàn Thành">Đã Hoàn Thành</option><option value="Đang Thực Hiện">Đang Thực Hiện</option></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Cảnh Báo</label><select id="warningFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Quá Hạn">Quá Hạn</option><option value="Sắp đến hạn">Sắp đến hạn</option><option value="Không có">Không có</option></select></div></div><div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div><label for="searchMstFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm MST</label><input type="text" id="searchMstFilter" placeholder="Nhập MST..." class="w-full p-2 border rounded-lg"></div><div><label for="searchNntFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm Tên NNT</label><input type="text" id="searchNntFilter" placeholder="Nhập tên NNT..." class="w-full p-2 border rounded-lg"></div><div><label for="searchIdFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm theo ID</label><input type="text" id="searchIdFilter" placeholder="Nhập ID công việc..." class="w-full p-2 border rounded-lg"></div><div class="self-end"><button id="searchButton" class="w-full px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition-colors">Tìm kiếm</button></div></div>`;
+            // ***** KẾT THÚC: CẬP NHẬT HTML BỘ LỌC VỚI NÚT TÌM KIẾM *****
             
             showNotification("Đang tải tùy chọn bộ lọc...");
             
-            // SỬA LỖI: member không có quyền đọc toàn bộ collection
             let filterPopulationQuery;
             if (currentUserProfile && currentUserProfile.role === 'member') {
                 filterPopulationQuery = query(collection(db, "tasks"), where("nguoiPhuTrach", "==", currentUserProfile.name));
@@ -460,15 +486,25 @@
             const taskTypeFilterEl = document.getElementById('taskTypeFilter');
             taskTypeFilterEl.innerHTML = '<option value="all">Tất cả</option>' + allTaskTypes.map(o => `<option value="${o}">${o}</option>`).join('');
 
+            // ***** BẮT ĐẦU: CẬP NHẬT EVENT LISTENERS *****
             const triggerFetch = () => fetchAndRenderTasks('initial');
-            let debounceTimer;
-            const debouncedFetch = () => {
-                clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(triggerFetch, 500);
-            };
 
+            // Lắng nghe sự kiện thay đổi trên các ô select
             filtersContainer.querySelectorAll('select').forEach(el => el.addEventListener('change', triggerFetch));
-            filtersContainer.querySelectorAll('input').forEach(el => el.addEventListener('input', debouncedFetch));
+            
+            // Lắng nghe sự kiện click trên nút tìm kiếm mới
+            document.getElementById('searchButton').addEventListener('click', triggerFetch);
+            
+            // Tùy chọn: Cho phép nhấn Enter để tìm kiếm trong các ô input
+            filtersContainer.querySelectorAll('input').forEach(el => {
+                el.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault(); // Ngăn form submit (nếu có)
+                        triggerFetch();
+                    }
+                });
+            });
+            // ***** KẾT THÚC: CẬP NHẬT EVENT LISTENERS *****
         }
 
         // --- CRUD ---
@@ -784,6 +820,8 @@
             XLSX.writeFile(workbook, `Xuat_Cong_Viec_${new Date().toISOString().slice(0,10)}.xlsx`);
             showNotification("Kết xuất file Excel thành công!");
         }
+        
+        // ***** BẮT ĐẦU: HÀM NHẬP EXCEL ĐÃ CẬP NHẬT *****
         async function importFromExcel(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -799,8 +837,6 @@
                     showNotification("File Excel rỗng hoặc không có dữ liệu.", true);
                     return;
                 }
-
-                // --- BẮT ĐẦU: LOGIC VALIDATION ĐÃ SỬA ---
 
                 // 1. Chỉ kiểm tra các cột (header) bắt buộc
                 const headers = Object.keys(jsonData[0]);
@@ -833,9 +869,7 @@
                     TASK_FIELDS.forEach(field => {
                         const displayName = (field === 'nguoiPhuTrach' ? 'Người phụ trách' : field);
                         
-                        // Kiểm tra xem cột có tồn tại trong dòng không để tránh lỗi với các cột tùy chọn
                         if (row.hasOwnProperty(displayName)) {
-                            // Xử lý chuyển đổi ngày tháng từ định dạng số của Excel
                             if ((field === 'Ngày giao' || field === 'Hạn xử lý') && typeof row[displayName] === 'number') {
                                 const jsDate = new Date(Math.round((row[displayName] - 25569) * 86400 * 1000));
                                 const day = String(jsDate.getDate()).padStart(2, '0');
@@ -846,7 +880,6 @@
                                 newTask[field] = row[displayName] || '';
                             }
                         } else {
-                            // Nếu cột tùy chọn bị thiếu, gán giá trị rỗng
                             newTask[field] = '';
                         }
                     });
@@ -874,8 +907,6 @@
                      showNotification("Không có công việc hợp lệ nào được nhập. Vui lòng kiểm tra lại file.", true);
                 }
 
-                // --- KẾT THÚC: LOGIC VALIDATION ĐÃ SỬA ---
-
             } catch (error) {
                 console.error("Lỗi khi nhập từ Excel:", error);
                 showNotification("Có lỗi xảy ra khi nhập file.", true);
@@ -883,10 +914,10 @@
                 event.target.value = '';
             }
         }
+        // ***** KẾT THÚC: HÀM NHẬP EXCEL ĐÃ CẬP NHẬT *****
 
         setupAuthFormListeners();
     });
     </script>
 </body>
 </html>
-
