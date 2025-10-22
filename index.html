@@ -1101,23 +1101,18 @@
             });
         }
         
-               /**
+        /**
          * Thiết lập listener real-time cho công việc mới KHI ĐÃ ĐĂNG NHẬP
          * @param {string} userId - ID của user hiện tại
          * @param {string} userName - Tên của user hiện tại
          */
-        function        (userId, userName) {
-            // *** BẮT ĐẦU SỬA LỖI REAL-TIME ***
-            
-            // 1. Tạo một "vùng đệm" 5 giây (5000ms) để xử lý lệch đồng hồ
-            // (khi đồng hồ client chạy nhanh hơn server)
-            const listenerStartTime = new Date(Date.now() - 5000); 
-
-            // 2. Sửa truy vấn:
+        function setupTaskListener(userId, userName) {
+            // ... (Nội dung hàm này giữ nguyên)
+            // và được gán cho user này
             const q = query(
                 collection(db, "tasks"),
                 where("nguoiPhuTrach", "==", userName),
-                where("createdAt", ">", listenerStartTime) // Sử dụng thời gian đã đệm
+                where("createdAt", ">", new Date()) // Chỉ lấy các task tạo từ bây giờ
             );
 
             taskListenerUnsubscribe = onSnapshot(q, (snapshot) => {
@@ -1126,15 +1121,7 @@
                     // Chỉ quan tâm khi có task 'added'
                     if (change.type === "added") {
                         const newTask = { id: change.doc.id, ...change.doc.data() };
-                        
-                        // 3. KIỂM TRA TRÙNG LẶP:
-                        // Chỉ thêm nếu task này CHƯA có trong danh sách thông báo ban đầu
-                        // (do loadInitialData và onSnapshot có thể giao thoa)
-                        const isDuplicate = newlyAssignedTasks.some(task => task.id === newTask.id);
-                        
-                        if (!isDuplicate) {
-                            tasksAdded.push(newTask);
-                        }
+                        tasksAdded.push(newTask);
                     }
                 });
 
@@ -1149,7 +1136,6 @@
             }, (error) => {
                 console.error("Lỗi khi lắng nghe công việc mới (đã đăng nhập): ", error);
             });
-            // *** KẾT THÚC SỬA LỖI REAL-TIME ***
         }
 
         // XÓA: Toàn bộ các hàm liên quan đến popup ở màn hình đăng nhập
