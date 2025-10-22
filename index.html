@@ -258,12 +258,8 @@
         </div>
     </div>
 
-    <!-- POPUP THÔNG BÁO CHO MÀN HÌNH ĐĂNG NHẬP -->
-    <div id="loginNotificationPopup" class="fixed top-5 right-5 z-[100] hidden opacity-0 translate-y-4 transform transition-all duration-300">
-        <div class="p-4 rounded-lg shadow-lg text-white font-semibold bg-indigo-600">
-            <p id="loginNotificationMessage">Bạn có công việc mới!</p>
-        </div>
-    </div>
+    <!-- POPUP THÔNG BÁO CHO MÀN HÌNH ĐĂNG NHẬP (ĐÃ XÓA) -->
+    <!-- <div id="loginNotificationPopup" ...></div> -->
 
     <script type="module">
     document.addEventListener('DOMContentLoaded', () => {
@@ -279,7 +275,8 @@
         // **NEW**: Biến cho tính năng thông báo
         let newlyAssignedTasks = [];
         let taskListenerUnsubscribe = null; // Biến để lưu hàm hủy listener
-        let authTaskListenerUnsubscribe = null; // Biến listener cho màn hình đăng nhập
+        // XÓA: authTaskListenerUnsubscribe
+        // let authTaskListenerUnsubscribe = null; 
 
         const PAGE_SIZE = 20; 
         let currentPage = 1;
@@ -302,16 +299,14 @@
                 taskListenerUnsubscribe();
                 taskListenerUnsubscribe = null;
             }
-            if (authTaskListenerUnsubscribe) {
-                authTaskListenerUnsubscribe();
-                authTaskListenerUnsubscribe = null;
-            }
+            // XÓA: Listener cho màn hình auth
+            // if (authTaskListenerUnsubscribe) { ... }
 
             if (user) {
                 // Người dùng đã đăng nhập
                 await loadInitialData(user);
-                // Ẩn thông báo ở màn hình đăng nhập (nếu có)
-                hideLoginNotificationPopup();
+                // XÓA: Ẩn thông báo ở màn hình đăng nhập
+                // hideLoginNotificationPopup();
             } else {
                 // Người dùng đã đăng xuất
                 currentUserProfile = null;
@@ -323,8 +318,8 @@
                 sessionStorage.removeItem('welcomeShown');
                 resetAuthFormUI();
                 updateNotificationBell(0); // Reset chuông
-                // **NEW**: Bắt đầu lắng nghe thông báo khi ở màn hình đăng nhập
-                setupAuthScreenTaskListener();
+                // XÓA: Bắt đầu lắng nghe thông báo khi ở màn hình đăng nhập
+                // setupAuthScreenTaskListener();
             }
         });
 
@@ -362,29 +357,30 @@
                     sessionStorage.setItem('welcomeShown', 'true');
                 }
 
-                // --- BẮT ĐẦU: LOGIC THÔNG BÁO MỚI ---
+                // --- BẮT ĐẦU: LOGIC THÔNG BÁO MỚI (ĐÃ SỬA LỖI INDEX) ---
                 // 1. Lấy thời gian đăng nhập lần cuối
-                const lastLoginTime = currentUserProfile.lastLogin ? currentUserProfile.lastLogin.toDate() : new Date(0); // Mặc định là đầu thời gian
+                const lastLoginTime = currentUserProfile.lastLogin ? currentUserProfile.lastLogin.toDate() : new Date(0); 
 
-                // 2. Query các task MỚI được tạo (createdAt) cho user này kể từ lần đăng nhập cuối
-                // Lưu ý: Chỉ query 'createdAt'. Nếu task được *cập nhật* để gán cho user thì logic này sẽ không bắt được.
-                // Để bắt cả trường hợp đó, cần 1 trường 'assignedAt' riêng, hoặc query 'lastModified' (nhưng sẽ bắt cả chỉnh sửa).
-                // Hiện tại, chúng ta giả định "việc mới" là việc "mới được tạo" (createdAt).
+                // 2. SỬA LỖI INDEX: Chỉ query theo 'nguoiPhuTrach'
                 const newTasksQuery = query(
                     collection(db, "tasks"),
-                    where("nguoiPhuTrach", "==", currentUserProfile.name),
-                    where("createdAt", ">", lastLoginTime)
+                    where("nguoiPhuTrach", "==", currentUserProfile.name)
                 );
 
                 const newTasksSnapshot = await getDocs(newTasksQuery);
-                const newTasksCount = newTasksSnapshot.size;
-                newlyAssignedTasks = newTasksSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-
+                
+                // SỬA LỖI INDEX: Lọc client-side (bằng JS)
+                const allUserTasks = newTasksSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                newlyAssignedTasks = allUserTasks.filter(task => 
+                    task.createdAt && task.createdAt.toDate() > lastLoginTime
+                );
+                const newTasksCount = newlyAssignedTasks.length;
+                
                 // 3. Cập nhật UI (chuông)
                 updateNotificationBell(newTasksCount);
                 renderNewTasksDropdown(); // Cập nhật danh sách thả xuống
 
-                // 4. Hiển thị popup thông báo (Theo yêu cầu 2, thực hiện sau khi đăng nhập)
+                // 4. Hiển thị popup thông báo (Đây là logic bạn muốn giữ lại)
                 if (newTasksCount > 0) {
                     showNotification(`Bạn có ${newTasksCount} công việc mới vừa được giao!`, false);
                 }
@@ -431,18 +427,29 @@
             document.getElementById('table-loader').classList.remove('hidden');
             document.getElementById('tasksTableBody').innerHTML = '';
             try {
-                const queryConstraints = [orderBy("createdAt", "desc")];
+                // --- SỬA LỖI INDEX ---
+                let q;
                 if (currentUserProfile && currentUserProfile.role === 'member') {
-                    queryConstraints.push(where("nguoiPhuTrach", "==", currentUserProfile.name));
+                    // 1. Chỉ query theo 'nguoiPhuTrach' để tránh lỗi index
+                    q = query(collection(db, "tasks"), where("nguoiPhuTrach", "==", currentUserProfile.name));
+                } else {
+                    // Admin/Leader có thể query và sắp xếp (giả sử có index mặc định hoặc sẽ tạo)
+                    // Nếu admin cũng bị lỗi, chúng ta cũng sẽ bỏ orderBy ở đây
+                    q = query(collection(db, "tasks"), orderBy("createdAt", "desc"));
                 }
                 
-                const q = query(collection(db, "tasks"), ...queryConstraints);
                 const snapshot = await getDocs(q);
                 allTasks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
                 
-                // Không hiển thị thông báo "tải thành công" ở đây nữa, 
-                // vì nó bị trùng với thông báo "có việc mới"
-                // showNotification(`Đã tải thành công ${allTasks.length} công việc.`);
+                // 2. Sắp xếp client-side (bằng JS) nếu là 'member'
+                if (currentUserProfile && currentUserProfile.role === 'member') {
+                    allTasks.sort((a, b) => {
+                        const timeA = a.createdAt ? a.createdAt.toDate().getTime() : 0;
+                        const timeB = b.createdAt ? b.createdAt.toDate().getTime() : 0;
+                        return timeB - timeA; // Sắp xếp giảm dần (mới nhất trước)
+                    });
+                }
+                // --- KẾT THÚC SỬA LỖI INDEX ---
                 
                 applyFiltersAndRender(); 
             } catch (error) {
@@ -566,8 +573,8 @@
             const filtersContainer = document.getElementById('filters');
             filtersContainer.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"><div><label class="block text-sm font-medium text-slate-600 mb-1">Loại công việc</label><select id="taskTypeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Người phụ trách</label><select id="assigneeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Trạng thái</label><select id="statusFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Đã Hoàn Thành">Đã Hoàn Thành</option><option value="Đang Thực Hiện">Đang Thực Hiện</option></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Cảnh Báo</label><select id="warningFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Quá Hạn">Quá Hạn</option><option value="Sắp đến hạn">Sắp đến hạn</option><option value="Không có">Không có</option></select></div></div><div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div><label for="searchMstFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm MST</label><input type="text" id="searchMstFilter" placeholder="Nhập MST..." class="w-full p-2 border rounded-lg"></div><div><label for="searchNntFilter" class"block text-sm font-medium text-slate-600 mb-1">Tìm kiếm Tên NNT</label><input type="text" id="searchNntFilter" placeholder="Nhập tên NNT..." class="w-full p-2 border rounded-lg"></div><div><label for="searchIdFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm theo ID</label><input type="text" id="searchIdFilter" placeholder="Nhập ID công việc..." class="w-full p-2 border rounded-lg"></div></div>`;
             
-            showNotification("Đang tải tùy chọn bộ lọc...");
-            
+            // SỬA LỖI INDEX: (Tương tự fetchAllData)
+            // Dùng logic query đã sửa để tránh lỗi khi tải bộ lọc
             let filterPopulationQuery;
             if (currentUserProfile && currentUserProfile.role === 'member') {
                 filterPopulationQuery = query(collection(db, "tasks"), where("nguoiPhuTrach", "==", currentUserProfile.name));
@@ -575,7 +582,9 @@
                 filterPopulationQuery = query(collection(db, "tasks"));
             }
             const tasksSnapshot = await getDocs(filterPopulationQuery);
+            // SỬA LỖI: Thêm định nghĩa allTasksData
             const allTasksData = tasksSnapshot.docs.map(d => d.data());
+            // ... (Phần còn lại của hàm giữ nguyên)
 
             const uniqueAssignees = [...new Set(allTasksData.map(task => task.nguoiPhuTrach).filter(Boolean))].sort();
             const assigneeFilterEl = document.getElementById('assigneeFilter');
@@ -1025,7 +1034,9 @@
          * @param {number} count - Số lượng thông báo mới
          */
         function updateNotificationBell(count) {
+            // SỬA LỖI: Thêm định nghĩa 'badge'
             const badge = document.getElementById('notificationBadge');
+            // ... (Nội dung hàm này giữ nguyên)
             if (count > 0) {
                 badge.textContent = count > 9 ? '9+' : count;
                 badge.classList.remove('hidden');
@@ -1038,7 +1049,9 @@
          * Hiển thị danh sách công việc mới trong dropdown
          */
         function renderNewTasksDropdown() {
+            // SỬA LỖI: Thêm định nghĩa 'listEl'
             const listEl = document.getElementById('notificationList');
+            // ... (Nội dung hàm này giữ nguyên)
             const dropdown = document.getElementById('notificationDropdown');
             listEl.innerHTML = ''; // Xóa danh sách cũ
 
@@ -1067,7 +1080,9 @@
          * Gắn sự kiện cho chuông và xử lý click bên ngoài
          */
         function setupNotificationBellListeners() {
+            // SỬA LỖI: Thêm định nghĩa 'bellButton'
             const bellButton = document.getElementById('notificationBellButton');
+            // ... (Nội dung hàm này giữ nguyên)
             const dropdown = document.getElementById('notificationDropdown');
             const bellContainer = document.getElementById('notificationBell');
 
@@ -1092,7 +1107,7 @@
          * @param {string} userName - Tên của user hiện tại
          */
         function setupTaskListener(userId, userName) {
-            // Chỉ lắng nghe các task MỚI được tạo (createdAt > thời điểm hiện tại)
+            // ... (Nội dung hàm này giữ nguyên)
             // và được gán cho user này
             const q = query(
                 collection(db, "tasks"),
@@ -1123,81 +1138,21 @@
             });
         }
 
+        // XÓA: Toàn bộ các hàm liên quan đến popup ở màn hình đăng nhập
         /**
          * Thiết lập listener real-time KHI Ở MÀN HÌNH ĐĂNG NHẬP
          */
-        function setupAuthScreenTaskListener() {
-            // Lấy email từ input
-            const emailInput = document.getElementById('emailInput');
-            let currentEmail = '';
-
-            // Chỉ lắng nghe khi user gõ email
-            emailInput.addEventListener('input', () => {
-                const email = emailInput.value.trim();
-                // Nếu email thay đổi, hủy listener cũ và tạo listener mới
-                if (email !== currentEmail) {
-                    currentEmail = email;
-                    
-                    // Hủy listener cũ
-                    if (authTaskListenerUnsubscribe) {
-                        authTaskListenerUnsubscribe();
-                        authTaskListenerUnsubscribe = null;
-                        hideLoginNotificationPopup(); // Ẩn popup cũ
-                    }
-
-                    if (currentEmail) {
-                        // 1. Tìm user name dựa trên email
-                        const userQuery = query(collection(db, "users"), where("email", "==", currentEmail));
-                        
-                        getDocs(userQuery).then(userSnapshot => {
-                            if (!userSnapshot.empty) {
-                                const user = userSnapshot.docs[0].data();
-                                const userName = user.name;
-                                const lastLoginTime = user.lastLogin ? user.lastLogin.toDate() : new Date(0);
-                                
-                                // 2. Lắng nghe các task MỚI (tạo sau lần đăng nhập cuối) cho user name đó
-                                const taskQuery = query(
-                                    collection(db, "tasks"),
-                                    where("nguoiPhuTrach", "==", userName),
-                                    where("createdAt", ">", lastLoginTime)
-                                );
-                                
-                                authTaskListenerUnsubscribe = onSnapshot(taskQuery, (taskSnapshot) => {
-                                    if (!taskSnapshot.empty && !auth.currentUser) {
-                                        // Chỉ hiển thị popup nếu có task mới VÀ user chưa đăng nhập
-                                        showLoginNotificationPopup(`Bạn có ${taskSnapshot.size} công việc mới!`);
-                                    } else {
-                                        hideLoginNotificationPopup();
-                                    }
-                                }, (error) => {
-                                    console.error("Lỗi khi lắng nghe (chưa đăng nhập):", error);
-                                });
-                            }
-                        });
-                    }
-                }
-            });
-        }
+        // function setupAuthScreenTaskListener() { ... }
         
         /**
          * Hiển thị popup thông báo ở màn hình đăng nhập
          */
-        function showLoginNotificationPopup(message) {
-            const popup = document.getElementById('loginNotificationPopup');
-            const messageEl = document.getElementById('loginNotificationMessage');
-            messageEl.textContent = message;
-            popup.classList.remove('hidden', 'opacity-0', 'translate-y-4');
-            popup.classList.add('opacity-100', 'translate-y-0');
-        }
+        // function showLoginNotificationPopup(message) { ... }
 
         /**
          * Ẩn popup thông báo ở màn hình đăng nhập
          */
-        function hideLoginNotificationPopup() {
-            const popup = document.getElementById('loginNotificationPopup');
-            popup.classList.add('opacity-0', 'translate-y-4');
-            setTimeout(() => popup.classList.add('hidden'), 300);
-        }
+        // function hideLoginNotificationPopup() { ... }
 
         // --- BẮT ĐẦU CHẠY ỨNG DỤNG ---
         setupAuthFormListeners();
@@ -1205,3 +1160,4 @@
     </script>
 </body>
 </html>
+
