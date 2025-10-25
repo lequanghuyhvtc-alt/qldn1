@@ -597,7 +597,6 @@
 
         // --- BỘ LỌC VÀ SỰ KIỆN ---
         async function populateFilters() {
-            // ... (Nội dung hàm này giữ nguyên)
             const filtersContainer = document.getElementById('filters');
             // === BẮT ĐẦU THAY ĐỔI: Thêm 2 trường date picker vào HTML ===
             filtersContainer.innerHTML = `
@@ -662,9 +661,7 @@
                 filterPopulationQuery = query(collection(db, "tasks"));
             }
             const tasksSnapshot = await getDocs(filterPopulationQuery);
-            // SỬA LỖI: Thêm định nghĩa allTasksData
             const allTasksData = tasksSnapshot.docs.map(d => d.data());
-            // ... (Phần còn lại của hàm giữ nguyên)
 
             const uniqueAssignees = [...new Set(allTasksData.map(task => task.nguoiPhuTrach).filter(Boolean))].sort();
             const assigneeFilterEl = document.getElementById('assigneeFilter');
@@ -1144,9 +1141,7 @@
          * @param {number} count - Số lượng thông báo mới
          */
         function updateNotificationBell(count) {
-            // SỬA LỖI: Thêm định nghĩa 'badge'
             const badge = document.getElementById('notificationBadge');
-            // ... (Nội dung hàm này giữ nguyên)
             if (count > 0) {
                 badge.textContent = count > 9 ? '9+' : count;
                 badge.classList.remove('hidden');
@@ -1159,9 +1154,7 @@
          * Hiển thị danh sách công việc mới trong dropdown
          */
         function renderNewTasksDropdown() {
-            // SỬA LỖI: Thêm định nghĩa 'listEl'
             const listEl = document.getElementById('notificationList');
-            // ... (Nội dung hàm này giữ nguyên)
             const dropdown = document.getElementById('notificationDropdown');
             listEl.innerHTML = ''; // Xóa danh sách cũ
 
@@ -1190,9 +1183,7 @@
          * Gắn sự kiện cho chuông và xử lý click bên ngoài
          */
         function setupNotificationBellListeners() {
-            // SỬA LỖI: Thêm định nghĩa 'bellButton'
             const bellButton = document.getElementById('notificationBellButton');
-            // ... (Nội dung hàm này giữ nguyên)
             const dropdown = document.getElementById('notificationDropdown');
             const bellContainer = document.getElementById('notificationBell');
 
@@ -1270,3 +1261,4 @@
     </script>
 </body>
 </html>
+
