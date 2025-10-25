@@ -16,17 +16,11 @@
         import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, query, where, orderBy, serverTimestamp, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
         import { getStorage } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-storage.js";
 
-        // --- BẮT ĐẦU: KHỞI TẠO FIREBASE (SỬ DỤNG API v9) ---
-        const firebaseConfig = {
-          // Vui lòng giữ bí mật khóa API của bạn
-          apiKey: "AIzaSyDxteIBXiT92KbGy_5M0HKnkflgCiGn1-c",
-          authDomain: "qldn1-d0895.firebaseapp.com",
-          projectId: "qldn1-d0895",
-          storageBucket: "qldn1-d0895.appspot.com",
-          messagingSenderId: "624100323347",
-          appId: "1:624100323347:web:9eb65780fee0887755cfe6",
-          measurementId: "G-LETT8XEEJG"
-        };
+        // --- BẮT ĐẦU: KHỞI TẠO FIREBASE (SỬ DỤNG BIẾN MÔI TRƯỜNG AN TOÀN) ---
+        // *** KHUYẾN NGHỊ BẢO MẬT: Không đặt apiKey trong mã nguồn client-side. ***
+        // Sử dụng biến toàn cục được cung cấp an toàn bởi môi trường hosting (nếu có).
+        // Giả sử __firebase_config được cung cấp an toàn:
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { /* Cấu hình mặc định nếu cần */ };
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -258,36 +252,37 @@
         </div>
     </div>
 
-    <!-- POPUP THÔNG BÁO CHO MÀN HÌNH ĐĂNG NHẬP (ĐÃ XÓA) -->
-    <!-- <div id="loginNotificationPopup" ...></div> -->
-
     <script type="module">
     document.addEventListener('DOMContentLoaded', () => {
         // --- CÁC BIẾN TOÀN CỤC VÀ CÀI ĐẶT ---
+        // Sử dụng window.firebase đã được khởi tạo ở thẻ <script type="module"> trên
         const { auth, db, collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, query, where, orderBy, serverTimestamp, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, writeBatch, onSnapshot } = window.firebase;
         
+        // Cố định các hằng số cấu hình
+        const PAGE_SIZE = 20; 
+        const TASK_FIELDS = ['Loại công việc', 'MST', 'Tên NNT', 'nguoiPhuTrach', 'Ngày giao', 'Hạn xử lý', 'Trạng thái', 'Ghi chú'];
+        const PREDEFINED_LISTS = {
+            'Trạng thái': ['Đang Thực Hiện', 'Đã Hoàn Thành', 'Đã Hủy'],
+            'Loại công việc': [ 'Giải thể - Đơn giản','Giải thể - Chuyển Tổ KT', 'Chuyển quận','Hoàn thuế GTGT', 'Quản lý nợ', 'Kiểm tra tại CQT', 'Hoàn thuế TNCN', 'Rủi ro Hóa đơn', 'Quản lý đối tượng'],
+            'nguoiPhuTrach': [] // Sẽ được điền động sau
+        };
+        const CORE_STATUSES = { 'Đã Hoàn Thành': '#22c55e', 'Đang Thực Hiện': '#3b82f6', 'Quá Hạn': '#ef4444', 'Sắp đến hạn': '#f59e0b' };
+        const ALL_STATUSES = Object.keys(CORE_STATUSES);
+
+
+        // Khai báo trạng thái ứng dụng
         let allTasks = []; 
         let filteredTasks = []; 
         let allUsersData = [];
         let currentUserProfile = null;
         let isLogin = true;
 
-        // **NEW**: Biến cho tính năng thông báo
         let newlyAssignedTasks = [];
-        let taskListenerUnsubscribe = null; // Biến để lưu hàm hủy listener
-        // XÓA: authTaskListenerUnsubscribe
-        // let authTaskListenerUnsubscribe = null; 
+        let taskListenerUnsubscribe = null; 
 
-        const PAGE_SIZE = 20; 
         let currentPage = 1;
 
-        const TASK_FIELDS = ['Loại công việc', 'MST', 'Tên NNT', 'nguoiPhuTrach', 'Ngày giao', 'Hạn xử lý', 'Trạng thái', 'Ghi chú'];
         let statusChart, workloadChart, taskTypeStatusChart;
-        const PREDEFINED_LISTS = {
-            'Trạng thái': ['Đang Thực Hiện', 'Đã Hoàn Thành', 'Đã Hủy'],
-            'Loại công việc': [ 'Giải thể - Đơn giản','Giải thể - Chuyển Tổ KT', 'Chuyển quận','Hoàn thuế GTGT', 'Quản lý nợ', 'Kiểm tra tại CQT', 'Hoàn thuế TNCN', 'Rủi ro Hóa đơn', 'Quản lý đối tượng'],
-            'nguoiPhuTrach': [] 
-        };
 
         const authContainer = document.getElementById('authContainer');
         const dashboardContainer = document.getElementById('dashboardContainer');
@@ -299,14 +294,10 @@
                 taskListenerUnsubscribe();
                 taskListenerUnsubscribe = null;
             }
-            // XÓA: Listener cho màn hình auth
-            // if (authTaskListenerUnsubscribe) { ... }
 
             if (user) {
                 // Người dùng đã đăng nhập
                 await loadInitialData(user);
-                // XÓA: Ẩn thông báo ở màn hình đăng nhập
-                // hideLoginNotificationPopup();
             } else {
                 // Người dùng đã đăng xuất
                 currentUserProfile = null;
@@ -318,8 +309,6 @@
                 sessionStorage.removeItem('welcomeShown');
                 resetAuthFormUI();
                 updateNotificationBell(0); // Reset chuông
-                // XÓA: Bắt đầu lắng nghe thông báo khi ở màn hình đăng nhập
-                // setupAuthScreenTaskListener();
             }
         });
 
@@ -327,22 +316,31 @@
             try {
                 document.getElementById('adminSection').classList.add('hidden');
                 const userDoc = await getDoc(doc(db, "users", user.uid));
-                if (!userDoc.exists()) throw new Error('Không tìm thấy thông tin hồ sơ người dùng.');
+                
+                // --- Xử lý lỗi: userDoc.exists() ---
+                if (!userDoc.exists()) {
+                    // Cố gắng tạo user profile cơ bản nếu bị thiếu (trường hợp hiếm gặp)
+                    await setDoc(doc(db, "users", user.uid), { 
+                        name: user.email.split('@')[0], 
+                        email: user.email, 
+                        role: 'pending',
+                        lastLogin: serverTimestamp()
+                    });
+                    throw new Error('Không tìm thấy thông tin hồ sơ người dùng. Đã tạo hồ sơ chờ phê duyệt.');
+                }
                 
                 currentUserProfile = { id: user.uid, ...userDoc.data() };
                 if (currentUserProfile.role === 'pending') throw new Error('Tài khoản của bạn đang chờ quản trị viên phê duyệt.');
 
                 document.getElementById('userName').textContent = currentUserProfile.name;
                 
-                if (currentUserProfile.role === 'admin') {
+                // Tải dữ liệu người dùng cho Admin/Leader
+                if (currentUserProfile.role === 'admin' || currentUserProfile.role === 'leader') {
                     const usersSnapshot = await getDocs(collection(db, "users"));
                     allUsersData = usersSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-                    renderAdminSection();
-                }
-
-                if (currentUserProfile.role === 'leader' && allUsersData.length === 0) {
-                     const usersSnapshot = await getDocs(collection(db, "users"));
-                    allUsersData = usersSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                    if (currentUserProfile.role === 'admin') {
+                        renderAdminSection();
+                    }
                 }
 
                 await initializeApp();
@@ -350,6 +348,7 @@
                 authContainer.classList.add('hidden');
                 dashboardContainer.classList.remove('hidden');
                 
+                // Hiển thị modal chào mừng
                 if (!sessionStorage.getItem('welcomeShown')) {
                     document.getElementById('welcomeMessage').innerHTML = `Chào mừng <span class="text-indigo-600">${currentUserProfile.name}</span>!`;
                     document.getElementById('welcomeModal').classList.remove('hidden');
@@ -357,11 +356,9 @@
                     sessionStorage.setItem('welcomeShown', 'true');
                 }
 
-                // --- BẮT ĐẦU: LOGIC THÔNG BÁO MỚI (ĐÃ SỬA LỖI INDEX) ---
-                // 1. Lấy thời gian đăng nhập lần cuối
+                // --- BẮT ĐẦU: LOGIC THÔNG BÁO MỚI ---
                 const lastLoginTime = currentUserProfile.lastLogin ? currentUserProfile.lastLogin.toDate() : new Date(0); 
 
-                // 2. SỬA LỖI INDEX: Chỉ query theo 'nguoiPhuTrach'
                 const newTasksQuery = query(
                     collection(db, "tasks"),
                     where("nguoiPhuTrach", "==", currentUserProfile.name)
@@ -369,35 +366,32 @@
 
                 const newTasksSnapshot = await getDocs(newTasksQuery);
                 
-                // SỬA LỖI INDEX: Lọc client-side (bằng JS)
                 const allUserTasks = newTasksSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
                 newlyAssignedTasks = allUserTasks.filter(task => 
                     task.createdAt && task.createdAt.toDate() > lastLoginTime
                 );
                 const newTasksCount = newlyAssignedTasks.length;
                 
-                // 3. Cập nhật UI (chuông)
                 updateNotificationBell(newTasksCount);
-                renderNewTasksDropdown(); // Cập nhật danh sách thả xuống
+                renderNewTasksDropdown(); 
 
-                // 4. Hiển thị popup thông báo (Đây là logic bạn muốn giữ lại)
                 if (newTasksCount > 0) {
                     showNotification(`Bạn có ${newTasksCount} công việc mới vừa được giao!`, false);
                 }
 
-                // 5. CRITICAL: Cập nhật lại thời gian đăng nhập cuối CỦA USER NÀY
-                // Làm việc này SAU KHI đã query xong
+                // CRITICAL: Cập nhật lại thời gian đăng nhập cuối CỦA USER NÀY
                 await setDoc(doc(db, "users", user.uid), { lastLogin: serverTimestamp() }, { merge: true });
 
-                // 6. Thiết lập listener real-time cho các công việc mới KHI ĐANG ĐĂNG NHẬP
+                // Thiết lập listener real-time cho các công việc mới 
                 setupTaskListener(user.uid, currentUserProfile.name);
                 
                 // --- KẾT THÚC: LOGIC THÔNG BÁO MỚI ---
 
             } catch (error) {
                 console.error("Lỗi khi tải dữ liệu ban đầu: ", error);
-                alert(`Lỗi: ${error.message}. Bạn sẽ được đăng xuất.`);
-                signOut(auth);
+                // Dùng thông báo nhẹ nhàng hơn thay vì alert()
+                showNotification(`Lỗi: ${error.message}. Bạn sẽ được đăng xuất.`, true);
+                setTimeout(() => signOut(auth), 1000); // Tự động đăng xuất sau 1 giây
             }
         }
         
@@ -413,7 +407,6 @@
             document.getElementById('cancelTaskButton').addEventListener('click', closeTaskModal);
             document.getElementById('logoutButton').addEventListener('click', () => signOut(auth));
 
-            // **NEW**: Gắn sự kiện cho chuông thông báo
             setupNotificationBellListeners();
 
             renderTableHeader();
@@ -430,25 +423,24 @@
                 // --- SỬA LỖI INDEX ---
                 let q;
                 if (currentUserProfile && currentUserProfile.role === 'member') {
-                    // 1. Chỉ query theo 'nguoiPhuTrach' để tránh lỗi index
+                    // Member: Chỉ query theo 'nguoiPhuTrach' 
                     q = query(collection(db, "tasks"), where("nguoiPhuTrach", "==", currentUserProfile.name));
                 } else {
-                    // Admin/Leader có thể query và sắp xếp (giả sử có index mặc định hoặc sẽ tạo)
-                    // Nếu admin cũng bị lỗi, chúng ta cũng sẽ bỏ orderBy ở đây
-                    q = query(collection(db, "tasks"), orderBy("createdAt", "desc"));
+                    // Admin/Leader: Tải toàn bộ (rủi ro về hiệu suất, nhưng cần thiết cho quyền quản trị)
+                    // Bỏ orderBy ở đây để tránh lỗi index, sẽ sắp xếp client-side
+                    q = query(collection(db, "tasks"));
                 }
                 
                 const snapshot = await getDocs(q);
                 allTasks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
                 
-                // 2. Sắp xếp client-side (bằng JS) nếu là 'member'
-                if (currentUserProfile && currentUserProfile.role === 'member') {
-                    allTasks.sort((a, b) => {
-                        const timeA = a.createdAt ? a.createdAt.toDate().getTime() : 0;
-                        const timeB = b.createdAt ? b.createdAt.toDate().getTime() : 0;
-                        return timeB - timeA; // Sắp xếp giảm dần (mới nhất trước)
-                    });
-                }
+                // 2. Sắp xếp client-side (luôn sắp xếp để đảm bảo tính nhất quán)
+                allTasks.sort((a, b) => {
+                    const timeA = a.createdAt ? a.createdAt.toDate().getTime() : 0;
+                    const timeB = b.createdAt ? b.createdAt.toDate().getTime() : 0;
+                    return timeB - timeA; // Sắp xếp giảm dần (mới nhất trước)
+                });
+                
                 // --- KẾT THÚC SỬA LỖI INDEX ---
                 
                 applyFiltersAndRender(); 
@@ -459,9 +451,25 @@
                 document.getElementById('table-loader').classList.add('hidden');
             }
         }
+        
+        // Hàm tiện ích để chuyển đổi chuỗi 'dd/mm/yyyy' thành đối tượng Date
+        function parseDate(dateString) {
+            if (!dateString) return null;
+            const parts = dateString.split('/');
+            if (parts.length === 3) {
+                // Định dạng Date(year, monthIndex, day)
+                const date = new Date(parts[2], parts[1] - 1, parts[0]);
+                // Kiểm tra xem date có hợp lệ không (ví dụ: ngày 30/02/2023)
+                if (date.getDate() == parts[0] && date.getMonth() == parts[1] - 1 && date.getFullYear() == parts[2]) {
+                    date.setHours(0, 0, 0, 0); // Đặt về đầu ngày để so sánh
+                    return date;
+                }
+            }
+            return null;
+        }
 
         function applyFiltersAndRender() {
-            // ... (Nội dung hàm này giữ nguyên)
+            // Lấy giá trị bộ lọc
             const type = document.getElementById('taskTypeFilter').value;
             const assignee = document.getElementById('assigneeFilter').value;
             const coreStatus = document.getElementById('statusFilter').value;
@@ -469,7 +477,16 @@
             const searchNnt = document.getElementById('searchNntFilter').value.trim().toLowerCase();
             const searchId = document.getElementById('searchIdFilter').value.trim().toLowerCase();
             const warningStatus = document.getElementById('warningFilter').value;
+            
+            // Lấy giá trị bộ lọc ngày giao
+            const dateFromStr = document.getElementById('dateAssignedFromFilter').value.trim();
+            const dateToStr = document.getElementById('dateAssignedToFilter').value.trim();
 
+            const dateFrom = parseDate(dateFromStr);
+            // Đối với ngày kết thúc, đặt giờ là 23:59:59 để bao gồm cả ngày đó
+            const dateTo = parseDate(dateToStr);
+            if(dateTo) dateTo.setHours(23, 59, 59, 999); 
+            
             filteredTasks = allTasks.filter(task => {
                 const typeMatch = type === 'all' || task['Loại công việc'] === type;
                 const assigneeMatch = assignee === 'all' || task['nguoiPhuTrach'] === assignee;
@@ -487,8 +504,28 @@
                 const idMatch = !searchId || (task.id && task.id.toLowerCase().includes(searchId));
                 const warningInfo = getWarningStatus(task);
                 const warningMatch = (warningStatus === 'all') || (warningStatus === 'Không có' && !warningInfo.label && task['Trạng thái'] !== 'Đã Hoàn Thành') || (warningInfo.label === warningStatus);
+
+                // --- LOGIC LỌC THEO KHOẢNG NGÀY GIAO MỚI ---
+                let dateAssignedMatch = true;
+                const assignedDate = parseDate(task['Ngày giao']); 
+
+                if (assignedDate) {
+                    if (dateFrom && dateTo) {
+                        dateAssignedMatch = assignedDate >= dateFrom && assignedDate <= dateTo;
+                    } else if (dateFrom) {
+                        dateAssignedMatch = assignedDate >= dateFrom;
+                    } else if (dateTo) {
+                        dateAssignedMatch = assignedDate <= dateTo;
+                    }
+                } else {
+                    // Nếu task không có 'Ngày giao' thì chỉ lọc ra nếu người dùng không đặt bộ lọc ngày
+                    if (dateFrom || dateTo) {
+                         dateAssignedMatch = false;
+                    }
+                }
+                // --- KẾT THÚC LOGIC LỌC NGÀY GIAO ---
                 
-                return typeMatch && assigneeMatch && statusMatch && mstMatch && nntMatch && idMatch && warningMatch;
+                return typeMatch && assigneeMatch && statusMatch && mstMatch && nntMatch && idMatch && warningMatch && dateAssignedMatch;
             });
             updateAnalytics(filteredTasks);
             currentPage = 1;
@@ -569,12 +606,63 @@
 
         // --- BỘ LỌC VÀ SỰ KIỆN ---
         async function populateFilters() {
-            // ... (Nội dung hàm này giữ nguyên)
+            // Cập nhật cấu trúc HTML của bộ lọc, thêm 2 trường ngày
             const filtersContainer = document.getElementById('filters');
-            filtersContainer.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"><div><label class="block text-sm font-medium text-slate-600 mb-1">Loại công việc</label><select id="taskTypeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Người phụ trách</label><select id="assigneeFilter" class="w-full p-2 border rounded-lg"></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Trạng thái</label><select id="statusFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Đã Hoàn Thành">Đã Hoàn Thành</option><option value="Đang Thực Hiện">Đang Thực Hiện</option></select></div><div><label class="block text-sm font-medium text-slate-600 mb-1">Cảnh Báo</label><select id="warningFilter" class="w-full p-2 border rounded-lg"><option value="all">Tất cả</option><option value="Quá Hạn">Quá Hạn</option><option value="Sắp đến hạn">Sắp đến hạn</option><option value="Không có">Không có</option></select></div></div><div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4"><div><label for="searchMstFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm MST</label><input type="text" id="searchMstFilter" placeholder="Nhập MST..." class="w-full p-2 border rounded-lg"></div><div><label for="searchNntFilter" class"block text-sm font-medium text-slate-600 mb-1">Tìm kiếm Tên NNT</label><input type="text" id="searchNntFilter" placeholder="Nhập tên NNT..." class="w-full p-2 border rounded-lg"></div><div><label for="searchIdFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm theo ID</label><input type="text" id="searchIdFilter" placeholder="Nhập ID công việc..." class="w-full p-2 border rounded-lg"></div></div>`;
+            filtersContainer.innerHTML = `
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 mb-1">Loại công việc</label>
+                        <select id="taskTypeFilter" class="w-full p-2 border rounded-lg"></select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 mb-1">Người phụ trách</label>
+                        <select id="assigneeFilter" class="w-full p-2 border rounded-lg"></select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 mb-1">Trạng thái</label>
+                        <select id="statusFilter" class="w-full p-2 border rounded-lg">
+                            <option value="all">Tất cả</option>
+                            <option value="Đã Hoàn Thành">Đã Hoàn Thành</option>
+                            <option value="Đang Thực Hiện">Đang Thực Hiện</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 mb-1">Cảnh Báo</label>
+                        <select id="warningFilter" class="w-full p-2 border rounded-lg">
+                            <option value="all">Tất cả</option>
+                            <option value="Quá Hạn">Quá Hạn</option>
+                            <option value="Sắp đến hạn">Sắp đến hạn</option>
+                            <option value="Không có">Không có</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                    <div>
+                        <label for="dateAssignedFromFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Từ ngày)</label>
+                        <input type="text" id="dateAssignedFromFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label for="dateAssignedToFilter" class="block text-sm font-medium text-slate-600 mb-1">Ngày giao (Đến ngày)</label>
+                        <input type="text" id="dateAssignedToFilter" placeholder="dd/mm/yyyy" class="w-full p-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label for="searchMstFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm MST</label>
+                        <input type="text" id="searchMstFilter" placeholder="Nhập MST..." class="w-full p-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label for="searchNntFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm Tên NNT</label>
+                        <input type="text" id="searchNntFilter" placeholder="Nhập tên NNT..." class="w-full p-2 border rounded-lg">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                    <div>
+                        <label for="searchIdFilter" class="block text-sm font-medium text-slate-600 mb-1">Tìm kiếm theo ID</label>
+                        <input type="text" id="searchIdFilter" placeholder="Nhập ID công việc..." class="w-full p-2 border rounded-lg">
+                    </div>
+                </div>
+            `;
             
-            // SỬA LỖI INDEX: (Tương tự fetchAllData)
-            // Dùng logic query đã sửa để tránh lỗi khi tải bộ lọc
+            // SỬA LỖI INDEX: Dùng logic query đã sửa để tránh lỗi khi tải bộ lọc
             let filterPopulationQuery;
             if (currentUserProfile && currentUserProfile.role === 'member') {
                 filterPopulationQuery = query(collection(db, "tasks"), where("nguoiPhuTrach", "==", currentUserProfile.name));
@@ -582,9 +670,7 @@
                 filterPopulationQuery = query(collection(db, "tasks"));
             }
             const tasksSnapshot = await getDocs(filterPopulationQuery);
-            // SỬA LỖI: Thêm định nghĩa allTasksData
             const allTasksData = tasksSnapshot.docs.map(d => d.data());
-            // ... (Phần còn lại của hàm giữ nguyên)
 
             const uniqueAssignees = [...new Set(allTasksData.map(task => task.nguoiPhuTrach).filter(Boolean))].sort();
             const assigneeFilterEl = document.getElementById('assigneeFilter');
@@ -606,6 +692,7 @@
                 debounceTimer = setTimeout(triggerFilter, 400);
             };
 
+            // Gắn sự kiện cho tất cả các phần tử lọc
             filtersContainer.querySelectorAll('select').forEach(el => el.addEventListener('change', triggerFilter));
             filtersContainer.querySelectorAll('input').forEach(el => el.addEventListener('input', debouncedFilter));
         }
@@ -621,6 +708,7 @@
                 const input = document.getElementById(`field-${field}`);
                 const displayName = field === 'nguoiPhuTrach' ? 'Người phụ trách' : field;
                 const isDate = displayName.includes('Ngày') || displayName.includes('Hạn');
+                // Thay thế alert bằng showNotification
                 if (isDate && input.value && !dateRegex.test(input.value)) {
                     showNotification(`Định dạng ngày cho trường "${displayName}" không hợp lệ. Vui lòng nhập theo dạng dd/mm/yyyy.`, true);
                     return;
@@ -648,8 +736,8 @@
         }
         
         async function deleteTask() {
-            // ... (Nội dung hàm này giữ nguyên)
-            if (!confirm('Bạn có chắc chắn muốn xóa công việc này không?')) return;
+            // SỬA LỖI: Thay thế confirm() bằng một hàm popup/modal tùy chỉnh
+            if (!await customConfirm('Bạn có chắc chắn muốn xóa công việc này không?')) return;
             const taskId = document.getElementById('taskId').value;
             if (!taskId) return;
             try {
@@ -733,8 +821,8 @@
         }
 
         async function rejectUser(userId) {
-            // ... (Nội dung hàm này giữ nguyên)
-            if (!confirm('Bạn có chắc chắn muốn từ chối và xóa người dùng này không?')) return;
+            // SỬA LỖI: Thay thế confirm() bằng một hàm popup/modal tùy chỉnh
+            if (!await customConfirm('Bạn có chắc chắn muốn từ chối và xóa người dùng này không?')) return;
             try {
                 await deleteDoc(doc(db, "users", userId));
                 allUsersData = allUsersData.filter(u => u.id !== userId);
@@ -792,11 +880,10 @@
             chartsContainer.innerHTML = `<div class="section-card"><h3 class="text-lg font-semibold text-center mb-4 text-slate-700">Tỷ lệ Trạng thái</h3><div class="chart-container"><canvas id="statusChart"></canvas></div></div><div class="section-card"><h3 class="text-lg font-semibold text-center mb-4 text-slate-700">Khối lượng Công việc</h3><div class="chart-container"><canvas id="workloadChart"></canvas></div></div><div class="section-card md:col-span-2 lg:col-span-1"><h3 class="text-lg font-semibold text-center mb-4 text-slate-700">Tình trạng theo Loại CV</h3><div class="chart-container"><canvas id="taskTypeStatusChart"></canvas></div></div>`;
             if(typeof ChartDataLabels !== 'undefined') { Chart.register(ChartDataLabels); }
             const DATALABELS_CONFIG = { formatter: v => v > 0 ? v : '', color: '#fff', font: { weight: 'bold' } };
-            const CORE_STATUSES = { 'Đã Hoàn Thành': '#22c55e', 'Đang Thực Hiện': '#3b82f6', 'Quá Hạn': '#ef4444', 'Sắp đến hạn': '#f59e0b' };
-            const ALL_STATUSES = Object.keys(CORE_STATUSES);
+            
             if (statusChart) statusChart.destroy(); if (workloadChart) workloadChart.destroy(); if (taskTypeStatusChart) taskTypeStatusChart.destroy();
             const statusCounts = ALL_STATUSES.reduce((a, s) => ({...a, [s]: 0}), {});
-            data.forEach(t => { const s = getOverallStatus(t); if (s in statusCounts) statusCounts[s]++; });
+            data.forEach(t => { const s = getOverallStatus(t); if (ALL_STATUSES.includes(s)) statusCounts[s]++; }); // Dùng ALL_STATUSES
             statusChart = new Chart('statusChart', { type: 'doughnut', data: { labels: ALL_STATUSES, datasets: [{ data: ALL_STATUSES.map(s => statusCounts[s]), backgroundColor: ALL_STATUSES.map(s => CORE_STATUSES[s]) }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }, datalabels: DATALABELS_CONFIG } } });
             const assignees = [...new Set(data.map(t => t.nguoiPhuTrach))].filter(Boolean).sort();
             workloadChart = new Chart('workloadChart', { type: 'bar', data: { labels: assignees, datasets: ALL_STATUSES.map(s => ({ label: s, data: assignees.map(a => data.filter(t => t['nguoiPhuTrach'] === a && getOverallStatus(t) === s).length), backgroundColor: CORE_STATUSES[s] })) }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } }, plugins: { legend: { position: 'bottom' }, datalabels: DATALABELS_CONFIG } } });
@@ -815,6 +902,47 @@
             popup.classList.add('opacity-100', 'translate-y-0');
             setTimeout(() => { popup.classList.add('opacity-0'); popup.classList.remove('opacity-100'); setTimeout(() => popup.classList.add('hidden', 'translate-y-4'), 300); }, 4000);
         }
+        
+        // --- HÀM TÙY CHỈNH THAY THẾ confirm() ---
+        function customConfirm(message) {
+            return new Promise((resolve) => {
+                // Tạo Modal
+                const modalHtml = `
+                    <div id="customConfirmModal" class="fixed inset-0 z-[110] flex items-center justify-center bg-black bg-opacity-60">
+                        <div class="bg-white rounded-lg shadow-2xl p-6 w-full max-w-sm text-center transform transition-all">
+                            <h3 class="text-xl font-bold text-slate-800 mb-4">Xác Nhận</h3>
+                            <p class="text-slate-600 mb-6">${message}</p>
+                            <div class="flex justify-center space-x-4">
+                                <button id="confirmCancelBtn" class="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors">Hủy</button>
+                                <button id="confirmOkBtn" class="px-6 py-2 bg-rose-600 text-white font-semibold rounded-lg shadow-md hover:bg-rose-700 transition-colors">Xác Nhận</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+                const modal = document.getElementById('customConfirmModal');
+
+                const cleanUp = () => {
+                    modal.remove();
+                    document.getElementById('confirmOkBtn').removeEventListener('click', handleOk);
+                    document.getElementById('confirmCancelBtn').removeEventListener('click', handleCancel);
+                };
+
+                const handleOk = () => {
+                    resolve(true);
+                    cleanUp();
+                };
+
+                const handleCancel = () => {
+                    resolve(false);
+                    cleanUp();
+                };
+
+                document.getElementById('confirmOkBtn').addEventListener('click', handleOk);
+                document.getElementById('confirmCancelBtn').addEventListener('click', handleCancel);
+            });
+        }
+
 
         // --- HÀM CHO MÀN HÌNH AUTH ---
         function setupAuthFormListeners() {
@@ -828,11 +956,11 @@
                 
                 if (isLogin) {
                     signInWithEmailAndPassword(auth, email, password).catch(error => {
-                        alert("Sai email hoặc mật khẩu.");
+                        showNotification("Sai email hoặc mật khẩu.", true); // Thay alert
                     });
                 } else {
                     const name = document.getElementById('nameInput').value;
-                    if (!name) { alert("Vui lòng nhập họ và tên."); return; }
+                    if (!name) { showNotification("Vui lòng nhập họ và tên.", true); return; } // Thay alert
                     createUserWithEmailAndPassword(auth, email, password)
                         .then(userCredential => {
                             // **NEW**: Thêm lastLogin khi tạo user mới
@@ -844,10 +972,10 @@
                             });
                         })
                         .then(() => {
-                            alert("Đăng ký thành công! Tài khoản của bạn đang chờ quản trị viên phê duyệt.");
+                            showNotification("Đăng ký thành công! Tài khoản của bạn đang chờ quản trị viên phê duyệt."); // Thay alert
                             signOut(auth);
                         })
-                        .catch(error => alert(error.code === 'auth/email-already-in-use' ? "Email này đã được sử dụng." : "Đã có lỗi xảy ra."));
+                        .catch(error => showNotification(error.code === 'auth/email-already-in-use' ? "Email này đã được sử dụng." : "Đã có lỗi xảy ra.", true)); // Thay alert
                 }
             });
 
@@ -893,7 +1021,9 @@
                 let currentList;
 
                 if (field === 'nguoiPhuTrach' && (currentUserProfile.role === 'leader' || currentUserProfile.role === 'admin')) {
-                    currentList = [...new Set(allTasks.map(t => t.nguoiPhuTrach).filter(Boolean))].sort();
+                    // Lấy tất cả người phụ trách hiện tại từ tasks và user list
+                    const taskAssignees = allTasks.map(t => t.nguoiPhuTrach).filter(Boolean);
+                    currentList = [...new Set([...allAssignees, ...taskAssignees])].sort();
                 } else {
                     const allAssignees = allUsersData.filter(u => u.role !== 'pending').map(u => u.name);
                     if (field === 'Loại công việc') currentList = PREDEFINED_LISTS['Loại công việc'];
@@ -902,11 +1032,19 @@
                 }
 
 		        if (field === 'nguoiPhuTrach' && currentUserProfile.role === 'member') {
+                    // Member chỉ được xem tên mình (readonly)
                     inputHtml = `<input type="text" id="field-${field}" value="${value || ''}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2 bg-slate-100" readonly>`;
-                } else if (currentList) {
+                } else if (currentList && currentList.length > 0) {
+                    // Dùng Select nếu có danh sách
                     const options = currentList.map(opt => `<option value="${opt}" ${opt === value ? 'selected' : ''}>${opt}</option>`).join('');
                     inputHtml = `<select id="field-${field}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2"><option value="">-- Chọn --</option>${options}</select>`;
-                } else {
+                } else if (field === 'Trạng thái') {
+                    // Luôn dùng Select cho Trạng thái
+                     const options = PREDEFINED_LISTS['Trạng thái'].map(opt => `<option value="${opt}" ${opt === value ? 'selected' : ''}>${opt}</option>`).join('');
+                    inputHtml = `<select id="field-${field}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2"><option value="">-- Chọn --</option>${options}</select>`;
+                } 
+                else {
+                    // Dùng Input thường
                     const isDate = displayName.includes('Ngày') || displayName.includes('Hạn');
                     inputHtml = `<input type="text" id="field-${field}" value="${value || ''}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2" ${isDate ? 'placeholder="dd/mm/yyyy"' : ''}>`;
                 }
@@ -919,6 +1057,7 @@
             document.getElementById('taskId').value = task ? task.id : '';
             const deleteButton = document.getElementById('deleteTaskButton');
             
+            // Chỉ hiển thị nút xóa cho Admin/Leader khi chỉnh sửa
             deleteButton.style.display = task && (currentUserProfile.role === 'leader' || currentUserProfile.role === 'admin') ? 'block' : 'none';
             
             deleteButton.onclick = deleteTask;
@@ -969,7 +1108,7 @@
                 const mandatoryHeaders = ['Loại công việc', 'MST', 'Người phụ trách'];
                 const missingHeaders = mandatoryHeaders.filter(h => !headers.includes(h));
                 if (missingHeaders.length > 0) {
-                    alert(`File Excel của bạn thiếu các cột bắt buộc sau: ${missingHeaders.join(', ')}`);
+                    showNotification(`File Excel của bạn thiếu các cột bắt buộc sau: ${missingHeaders.join(', ')}`, true); // Thay alert
                     return;
                 }
                 showNotification(`Đã tìm thấy ${jsonData.length} công việc. Bắt đầu kiểm tra và nhập...`);
@@ -1010,7 +1149,7 @@
                     successfulImports++;
                 });
                 if (failedRows.length > 0) {
-                    alert(`Lưu ý: ${failedRows.length} dòng đã bị bỏ qua do thiếu dữ liệu ở các cột bắt buộc (Loại công việc, MST, Người phụ trách).\nCác dòng bị lỗi: ${failedRows.join(', ')}`);
+                    showNotification(`Lưu ý: ${failedRows.length} dòng đã bị bỏ qua do thiếu dữ liệu ở các cột bắt buộc. Các dòng bị lỗi: ${failedRows.join(', ')}`, true); // Thay alert
                 }
                 if (successfulImports > 0) {
                     await batch.commit();
@@ -1138,26 +1277,12 @@
             });
         }
 
-        // XÓA: Toàn bộ các hàm liên quan đến popup ở màn hình đăng nhập
-        /**
-         * Thiết lập listener real-time KHI Ở MÀN HÌNH ĐĂNG NHẬP
-         */
-        // function setupAuthScreenTaskListener() { ... }
-        
-        /**
-         * Hiển thị popup thông báo ở màn hình đăng nhập
-         */
-        // function showLoginNotificationPopup(message) { ... }
-
-        /**
-         * Ẩn popup thông báo ở màn hình đăng nhập
-         */
-        // function hideLoginNotificationPopup() { ... }
-
         // --- BẮT ĐẦU CHẠY ỨNG DỤNG ---
         setupAuthFormListeners();
     });
     </script>
+    
+    <!-- MODAL POPUP TUỲ CHỈNH DÙNG THAY CHO confirm() -->
+    <!-- Modal này sẽ được JS chèn vào khi cần -->
 </body>
 </html>
-
