@@ -252,15 +252,22 @@
         </div>
     </div>
     
-    <!-- Popup thông báo chung -->
-    <div id="notificationPopup" class="fixed bottom-5 right-5 z-[100] hidden opacity-0 translate-y-4 transform transition-all duration-300">
-        <div class="p-4 rounded-lg shadow-lg text-white font-semibold">
-            <p id="notificationMessage"></p>
+
+</div>
+
+    <div id="loginNotificationPopup" class="fixed bottom-5 right-5 z-[100] hidden opacity-0 translate-y-4 transform transition-all duration-300">
+        <div id="loginNotificationContent" class="p-4 rounded-lg shadow-lg text-white font-semibold flex items-center space-x-2 bg-slate-600">
+            <svg id="loginSpinner" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p id="loginNotificationMessage">Đang kết nối...</p>
         </div>
     </div>
 
-    <!-- POPUP THÔNG BÁO CHO MÀN HÌNH ĐĂNG NHẬP (ĐÃ XÓA) -->
-    <!-- <div id="loginNotificationPopup" ...></div> -->
+    <div id="notificationPopup" class="fixed bottom-5 right-5 z-[100] hidden opacity-0 translate-y-4 transform transition-all duration-300">
+        ```
+
 
     <script type="module">
     document.addEventListener('DOMContentLoaded', () => {
@@ -300,14 +307,10 @@
                 taskListenerUnsubscribe();
                 taskListenerUnsubscribe = null;
             }
-            // XÓA: Listener cho màn hình auth
-            // if (authTaskListenerUnsubscribe) { ... }
 
             if (user) {
                 // Người dùng đã đăng nhập
                 await loadInitialData(user);
-                // XÓA: Ẩn thông báo ở màn hình đăng nhập
-                // hideLoginNotificationPopup();
             } else {
                 // Người dùng đã đăng xuất
                 currentUserProfile = null;
@@ -319,12 +322,17 @@
                 sessionStorage.removeItem('welcomeShown');
                 resetAuthFormUI();
                 updateNotificationBell(0); // Reset chuông
-                // XÓA: Bắt đầu lắng nghe thông báo khi ở màn hình đăng nhập
-                // setupAuthScreenTaskListener();
+                
+                // **SỬA ĐỔI**: Ẩn popup đăng nhập (nếu có) khi quay về màn hình login
+                hideLoginNotification(); 
             }
         });
 
         async function loadInitialData(user) {
+            // **SỬA ĐỔI**: Hiển thị thông báo đang tải dữ liệu
+            showLoginNotification("Đang tải dữ liệu người dùng...", false, true);
+            const loginButton = document.getElementById('loginForm').querySelector('button');
+
             try {
                 document.getElementById('adminSection').classList.add('hidden');
                 const userDoc = await getDoc(doc(db, "users", user.uid));
@@ -358,47 +366,44 @@
                     sessionStorage.setItem('welcomeShown', 'true');
                 }
 
-                // --- BẮT ĐẦU: LOGIC THÔNG BÁO MỚI (ĐÃ SỬA LỖI INDEX) ---
-                // 1. Lấy thời gian đăng nhập lần cuối
+                // --- (Logic thông báo chuông giữ nguyên) ---
                 const lastLoginTime = currentUserProfile.lastLogin ? currentUserProfile.lastLogin.toDate() : new Date(0); 
-
-                // 2. SỬA LỖI INDEX: Chỉ query theo 'nguoiPhuTrach'
                 const newTasksQuery = query(
                     collection(db, "tasks"),
                     where("nguoiPhuTrach", "==", currentUserProfile.name)
                 );
-
                 const newTasksSnapshot = await getDocs(newTasksQuery);
-                
-                // SỬA LỖI INDEX: Lọc client-side (bằng JS)
                 const allUserTasks = newTasksSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
                 newlyAssignedTasks = allUserTasks.filter(task => 
                     task.createdAt && task.createdAt.toDate() > lastLoginTime
                 );
                 const newTasksCount = newlyAssignedTasks.length;
                 
-                // 3. Cập nhật UI (chuông)
                 updateNotificationBell(newTasksCount);
-                renderNewTasksDropdown(); // Cập nhật danh sách thả xuống
+                renderNewTasksDropdown(); 
 
-                // 4. Hiển thị popup thông báo (Đây là logic bạn muốn giữ lại)
                 if (newTasksCount > 0) {
                     showNotification(`Bạn có ${newTasksCount} công việc mới vừa được giao!`, false);
                 }
-
-                // 5. CRITICAL: Cập nhật lại thời gian đăng nhập cuối CỦA USER NÀY
-                // Làm việc này SAU KHI đã query xong
                 await setDoc(doc(db, "users", user.uid), { lastLogin: serverTimestamp() }, { merge: true });
-
-                // 6. Thiết lập listener real-time cho các công việc mới KHI ĐANG ĐĂNG NHẬP
                 setupTaskListener(user.uid, currentUserProfile.name);
-                
-                // --- KẾT THÚC: LOGIC THÔNG BÁO MỚI ---
+                // --- (Kết thúc logic thông báo chuông) ---
+
+                // **SỬA ĐỔI**: Tải xong -> Ẩn popup đăng nhập và hiện popup dashboard
+                hideLoginNotification();
+                showNotification("Đăng nhập thành công!");
+                loginButton.disabled = false; // Kích hoạt lại nút phòng khi user đăng xuất
 
             } catch (error) {
+                // **SỬA ĐỔI**: Xử lý lỗi tinh tế hơn
                 console.error("Lỗi khi tải dữ liệu ban đầu: ", error);
-                alert(`Lỗi: ${error.message}. Bạn sẽ được đăng xuất.`);
-                signOut(auth);
+                const errorMessage = error.message || "Có lỗi xảy ra khi tải dữ liệu.";
+                
+                await signOut(auth); // Đăng xuất người dùng
+                
+                // Hiển thị lỗi trên màn hình đăng nhập (sau khi đã đăng xuất)
+                showLoginNotification(errorMessage, true, false);
+                loginButton.disabled = false; // Kích hoạt lại nút
             }
         }
         
@@ -922,6 +927,74 @@
             popup.classList.add('opacity-100', 'translate-y-0');
             setTimeout(() => { popup.classList.add('opacity-0'); popup.classList.remove('opacity-100'); setTimeout(() => popup.classList.add('hidden', 'translate-y-4'), 300); }, 4000);
         }
+	/**
+         * Hiển thị popup thông báo ở màn hình đăng nhập
+         * @param {string} message - Nội dung thông báo
+         * @param {boolean} isError - true nếu là lỗi (màu đỏ), false là thông báo (màu xanh/xám)
+         * @param {boolean} isLoading - true nếu đang tải (hiện spinner), false là thông báo tĩnh
+         */
+        function showLoginNotification(message, isError = false, isLoading = true) {
+            const popup = document.getElementById('loginNotificationPopup');
+            const messageEl = document.getElementById('loginNotificationMessage');
+            const contentEl = document.getElementById('loginNotificationContent');
+            const spinner = document.getElementById('loginSpinner');
+
+            messageEl.textContent = message;
+
+            // Cập nhật màu sắc
+            contentEl.classList.remove('bg-rose-500', 'bg-green-500', 'bg-slate-600');
+            if (isError) {
+                contentEl.classList.add('bg-rose-500'); // Lỗi: màu đỏ
+            } else if (!isLoading) {
+                contentEl.classList.add('bg-green-500'); // Thành công: màu xanh
+            } else {
+                contentEl.classList.add('bg-slate-600'); // Đang tải: màu xám
+            }
+
+            // Ẩn/hiện spinner
+            spinner.classList.toggle('hidden', !isLoading);
+
+            // Hiển thị popup
+            popup.classList.remove('hidden', 'opacity-0', 'translate-y-4');
+            popup.classList.add('opacity-100', 'translate-y-0');
+
+            // Tự động ẩn nếu là thông báo lỗi hoặc thành công (không phải loading)
+            if (!isLoading) {
+                setTimeout(hideLoginNotification, 4000);
+            }
+        }
+
+        /**
+         * Ẩn popup thông báo ở màn hình đăng nhập
+         */
+        function hideLoginNotification() {
+            const popup = document.getElementById('loginNotificationPopup');
+            popup.classList.add('opacity-0');
+            popup.classList.remove('opacity-100');
+            setTimeout(() => popup.classList.add('hidden', 'translate-y-4'), 300);
+        }
+
+        /**
+         * Chuyển mã lỗi Firebase Auth sang tiếng Việt
+         */
+        function getFirebaseAuthErrorMessage(code) {
+            switch (code) {
+                case 'auth/wrong-password':
+                    return 'Sai mật khẩu. Vui lòng thử lại.';
+                case 'auth/user-not-found':
+                    return 'Không tìm thấy tài khoản với email này.';
+                case 'auth/invalid-email':
+                    return 'Email không hợp lệ.';
+                case 'auth/email-already-in-use':
+                    return 'Email này đã được sử dụng.';
+                case 'auth/weak-password':
+                    return 'Mật khẩu quá yếu. Vui lòng chọn mật khẩu khác.';
+                default:
+                    return 'Đã có lỗi xảy ra. Vui lòng thử lại.';
+            }
+        }
+        // --- KẾT THÚC CÁC HÀM MỚI ---
+
 
         // --- HÀM CHO MÀN HÌNH AUTH ---
         function setupAuthFormListeners() {
@@ -932,29 +1005,60 @@
                 e.preventDefault();
                 const email = document.getElementById('emailInput').value;
                 const password = document.getElementById('passwordInput').value;
+                const submitButton = e.target.querySelector('button');
+
+                // Vô hiệu hóa nút để tránh click nhiều lần
+                submitButton.disabled = true;
                 
                 if (isLogin) {
-                    signInWithEmailAndPassword(auth, email, password).catch(error => {
-                        alert("Sai email hoặc mật khẩu.");
-                    });
+                    // --- LUỒNG ĐĂNG NHẬP ---
+                    showLoginNotification("Đang kết nối...", false, true);
+                    
+                    signInWithEmailAndPassword(auth, email, password)
+                        .then(userCredential => {
+                            // **SỬA ĐỔI**: Chuyển sang thông báo "Đang xác thực"
+                            // onAuthStateChanged sẽ tự động kích hoạt loadInitialData
+                            showLoginNotification("Đang xác thực... Vui lòng chờ...", false, true);
+                        })
+                        .catch(error => {
+                            // **SỬA ĐỔI**: Hiển thị lỗi bằng popup
+                            showLoginNotification(getFirebaseAuthErrorMessage(error.code), true, false);
+                            submitButton.disabled = false; // Kích hoạt lại nút nếu lỗi
+                        });
+
                 } else {
+                    // --- LUỒNG ĐĂNG KÝ ---
                     const name = document.getElementById('nameInput').value;
-                    if (!name) { alert("Vui lòng nhập họ và tên."); return; }
+                    if (!name) { 
+                        showLoginNotification("Vui lòng nhập họ và tên.", true, false);
+                        submitButton.disabled = false;
+                        return; 
+                    }
+                    
+                    showLoginNotification("Đang tạo tài khoản...", false, true);
+
                     createUserWithEmailAndPassword(auth, email, password)
                         .then(userCredential => {
-                            // **NEW**: Thêm lastLogin khi tạo user mới
+                            showLoginNotification("Đang lưu thông tin...", false, true);
+                            
                             return setDoc(doc(db, "users", userCredential.user.uid), { 
                                 name: name, 
                                 email: email, 
                                 role: 'pending',
-                                lastLogin: serverTimestamp() // Đặt lastLogin để không bị thông báo tất cả task cũ
+                                lastLogin: serverTimestamp() 
                             });
                         })
                         .then(() => {
-                            alert("Đăng ký thành công! Tài khoản của bạn đang chờ quản trị viên phê duyệt.");
-                            signOut(auth);
+                            // **SỬA ĐỔI**: Thông báo thành công bằng popup
+                            showLoginNotification("Đăng ký thành công! Vui lòng chờ phê duyệt.", false, false);
+                            signOut(auth); // Tự động đăng xuất để chờ duyệt
+                            submitButton.disabled = false;
                         })
-                        .catch(error => alert(error.code === 'auth/email-already-in-use' ? "Email này đã được sử dụng." : "Đã có lỗi xảy ra."));
+                        .catch(error => {
+                            // **SỬA ĐỔI**: Hiển thị lỗi bằng popup
+                            showLoginNotification(getFirebaseAuthErrorMessage(error.code), true, false);
+                            submitButton.disabled = false; // Kích hoạt lại nút nếu lỗi
+                        });
                 }
             });
 
@@ -970,6 +1074,7 @@
                 toggleFormLink.textContent = isLogin ? 'Chưa có tài khoản? Đăng ký' : 'Đã có tài khoản? Đăng nhập';
             });
         }
+
         function resetAuthFormUI() {
             // ... (Nội dung hàm này giữ nguyên)
             isLogin = true;
