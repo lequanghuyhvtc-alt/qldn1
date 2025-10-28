@@ -996,14 +996,23 @@
                 if (displayName.includes('Tên NNT') || displayName.includes('Ghi chú')) div.className = 'md:col-span-2';
                 
                 let inputHtml;
-                const allAssignees = allUsersData.filter(u => u.role !== 'pending').map(u => u.name);
+                // SỬA LỖI: Xóa định nghĩa `allAssignees` bị trùng lặp ở đây
                 let currentList;
 
                 if (field === 'nguoiPhuTrach' && (currentUserProfile.role === 'leader' || currentUserProfile.role === 'admin')) {
                     currentList = [...new Set(allTasks.map(t => t.nguoiPhuTrach).filter(Boolean))].sort();
                 } else {
                     const allAssignees = allUsersData.filter(u => u.role !== 'pending').map(u => u.name);
-                    if (field === 'Loại công việc') currentList = PREDEFINED_LISTS['Loại công việc'];
+
+                    // --- BẮT ĐẦU SỬA ĐỔI (LOGIC LẤY LOẠI CÔNG VIỆC) ---
+                    if (field === 'Loại công việc') {
+                        // Lấy các loại CV động từ allTasks (giống như bộ lọc)
+                        const dynamicTaskTypes = allTasks.map(task => task['Loại công việc']).filter(Boolean);
+                        // Kết hợp với danh sách định sẵn, loại bỏ trùng lặp và sắp xếp
+                        currentList = [...new Set([...PREDEFINED_LISTS['Loại công việc'], ...dynamicTaskTypes])].sort();
+                    } 
+                    // --- KẾT THÚC SỬA ĐỔI ---
+                    
                     else if (field === 'nguoiPhuTrach') currentList = allAssignees;
                     else currentList = PREDEFINED_LISTS[field];
                 }
@@ -1031,6 +1040,9 @@
             deleteButton.onclick = deleteTask;
             document.getElementById('taskModal').classList.remove('hidden');
         }
+
+
+
         function closeTaskModal() { document.getElementById('taskModal').classList.add('hidden'); }
         function closeWelcomeModal() {
             // ... (Nội dung hàm này giữ nguyên)
@@ -1040,7 +1052,10 @@
             setTimeout(() => { modal.classList.add('hidden'); }, 300);
         }
         
-        // --- HÀM XỬ LÝ EXCEL ---
+        
+
+
+	// --- HÀM XỬ LÝ EXCEL ---
         function downloadTemplate() { 
             // ... (Nội dung hàm này giữ nguyên)
             const displayHeaders = TASK_FIELDS.map(f => f === 'nguoiPhuTrach' ? 'Người phụ trách' : f); const worksheet = XLSX.utils.aoa_to_sheet([displayHeaders]); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, worksheet, 'Tasks'); XLSX.writeFile(workbook, "Mau_Nhap_Cong_Viec.xlsx"); 
