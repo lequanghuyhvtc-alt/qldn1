@@ -12,7 +12,8 @@
     <!-- Cập nhật Firebase SDK lên v9.15.0 để đồng bộ -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js";
-        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
+        // BỔ SUNG THÊM: updatePassword, reauthenticateWithCredential, EmailAuthProvider
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
         import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, query, where, orderBy, serverTimestamp, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
         import { getStorage } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-storage.js";
 
@@ -39,7 +40,9 @@
             query, where, orderBy, 
             serverTimestamp, onAuthStateChanged, signInWithEmailAndPassword,
             createUserWithEmailAndPassword, signOut, writeBatch,
-            onSnapshot // Thêm onSnapshot
+            onSnapshot, // Thêm onSnapshot
+            // BỔ SUNG THÊM
+            updatePassword, reauthenticateWithCredential, EmailAuthProvider
         };
     </script>
     
@@ -48,6 +51,9 @@
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
         .chart-container { position: relative; width: 100%; max-width: 600px; margin: auto; height: 320px; }
+        /* BỔ SUNG: Thêm con trỏ pointer cho biểu đồ */
+        .chart-container canvas { cursor: pointer; }
+        
         .table-responsive { display: block; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .kpi-card { transition: transform 0.2s, box-shadow 0.2s; }
         .kpi-card:hover { transform: translateY(-5px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
@@ -107,6 +113,14 @@
             border-bottom: none;
         }
         /* --- KẾT THÚC CSS CHO THÔNG BÁO MỚI --- */
+
+        /* BỔ SUNG: CSS cho modal biểu đồ toàn màn hình */
+        #chartModal { z-index: 70; } /* Cao hơn modal task */
+        #fullscreenChartContainer {
+            width: 90vw;
+            height: 85vh;
+            max-width: 1600px;
+        }
     </style>
 </head>
 <body class="text-slate-800">
@@ -170,11 +184,14 @@
             </div>
 
             <!-- Thông tin User -->
+            <!-- SỬA ĐỔI: Thêm nút Đổi mật khẩu -->
             <div id="userProfile" class="flex items-center space-x-3 bg-white p-2 rounded-lg shadow-sm">
                 <div>
                     <p id="userName" class="text-sm font-semibold text-slate-800"></p>
                 </div>
-                <button id="logoutButton" class="ml-4 px-3 py-1.5 text-xs font-medium text-white bg-rose-500 rounded-md hover:bg-rose-600 transition-colors">Đăng xuất</button>
+                <!-- NÚT MỚI -->
+                <button id="changePasswordButton" class="px-3 py-1.5 text-xs font-medium text-white bg-slate-500 rounded-md hover:bg-slate-600 transition-colors">Đổi mật khẩu</button>
+                <button id="logoutButton" class="ml-2 px-3 py-1.5 text-xs font-medium text-white bg-rose-500 rounded-md hover:bg-rose-600 transition-colors">Đăng xuất</button>
             </div>
         </div>
         <!-- === KẾT THÚC: KHU VỰC USER VÀ THÔNG BÁO === -->
@@ -252,8 +269,49 @@
         </div>
     </div>
     
+    <!-- === BẮT ĐẦU: MODAL MỚI ĐỂ ĐỔI MẬT KHẨU === -->
+    <div id="changePasswordModal" class="fixed inset-0 z-[60] flex items-center justify-center hidden bg-black bg-opacity-60">
+        <div class="bg-white rounded-lg shadow-2xl p-6 w-full max-w-md relative">
+            <h2 class="text-2xl font-bold text-slate-800 mb-4">Đổi mật khẩu</h2>
+            <form id="changePasswordForm">
+                <div class="space-y-4">
+                    <div>
+                        <label for="oldPassword" class="block text-sm font-medium text-slate-700">Mật khẩu cũ</label>
+                        <input type="password" id="oldPassword" required class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2">
+                    </div>
+                    <div>
+                        <label for="newPassword" class="block text-sm font-medium text-slate-700">Mật khẩu mới</label>
+                        <input type="password" id="newPassword" required class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2">
+                    </div>
+                    <div>
+                        <label for="confirmNewPassword" class="block text-sm font-medium text-slate-700">Xác nhận mật khẩu mới</label>
+                        <input type="password" id="confirmNewPassword" required class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2">
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end space-x-3">
+                    <button type="button" id="cancelChangePassword" class="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors">Hủy</button>
+                    <button type="submit" class="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">Lưu thay đổi</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- === KẾT THÚC: MODAL MỚI ĐỂ ĐỔI MẬT KHẨU === -->
+    
+    <!-- === BẮT ĐẦU: MODAL MỚI CHO BIỂU ĐỒ TOÀN MÀN HÌNH === -->
+    <div id="chartModal" class="fixed inset-0 flex items-center justify-center hidden bg-black bg-opacity-75 p-4">
+        <div class="bg-white rounded-lg shadow-2xl p-6 relative" id="fullscreenChartContainer">
+            <!-- Nút đóng modal -->
+            <button id="closeChartModal" class="absolute -top-3 -right-3 z-10 bg-white rounded-full p-1 shadow-lg hover:bg-slate-100">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-7 h-7 text-slate-700">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </button>
+            <!-- Canvas để vẽ biểu đồ -->
+            <canvas id="fullscreenChartCanvas"></canvas>
+        </div>
+    </div>
+    <!-- === KẾT THÚC: MODAL MỚI CHO BIỂU ĐỒ TOÀN MÀN HÌNH === -->
 
-</div>
 
     <div id="loginNotificationPopup" class="fixed bottom-5 right-5 z-[100] hidden opacity-0 translate-y-4 transform transition-all duration-300">
         <div id="loginNotificationContent" class="p-4 rounded-lg shadow-lg text-white font-semibold flex items-center space-x-2 bg-slate-600">
@@ -275,7 +333,8 @@
     <script type="module">
     document.addEventListener('DOMContentLoaded', () => {
         // --- CÁC BIẾN TOÀN CỤC VÀ CÀI ĐẶT ---
-        const { auth, db, collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, query, where, orderBy, serverTimestamp, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, writeBatch, onSnapshot } = window.firebase;
+        // BỔ SUNG: updatePassword, reauthenticateWithCredential, EmailAuthProvider
+        const { auth, db, collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, query, where, orderBy, serverTimestamp, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, writeBatch, onSnapshot, updatePassword, reauthenticateWithCredential, EmailAuthProvider } = window.firebase;
         
         let allTasks = []; 
         let filteredTasks = []; 
@@ -283,15 +342,17 @@
         let currentUserProfile = null;
         let isLogin = true;
 
-        // **NEW**: Biến cho tính năng thông báo
         let newlyAssignedTasks = [];
-        let taskListenerUnsubscribe = null; // Biến để lưu hàm hủy listener
+        let taskListenerUnsubscribe = null; 
 
         const PAGE_SIZE = 20; 
         let currentPage = 1;
 
         const TASK_FIELDS = ['Loại công việc', 'MST', 'Tên NNT', 'nguoiPhuTrach', 'Ngày giao', 'Hạn xử lý', 'Trạng thái', 'Ghi chú'];
-        let statusChart, workloadChart, taskTypeStatusChart;
+        
+        // SỬA ĐỔI: Thêm 1 biến cho biểu đồ toàn màn hình
+        let statusChart, workloadChart, taskTypeStatusChart, fullscreenChart;
+        
         const PREDEFINED_LISTS = {
             'Trạng thái': ['Đang Thực Hiện', 'Đã Hoàn Thành', 'Đã Hủy'],
             'Loại công việc': [ 'Giải thể - Đơn giản','Giải thể - Chuyển Tổ KT', 'Chuyển quận','Hoàn thuế GTGT', 'Quản lý nợ', 'Kiểm tra tại CQT', 'Hoàn thuế TNCN', 'Rủi ro Hóa đơn', 'Quản lý đối tượng'],
@@ -303,17 +364,14 @@
         
         // --- QUẢN LÝ XÁC THỰC (AUTH) ---
         onAuthStateChanged(auth, async (user) => {
-            // Hủy listener cũ (nếu có) khi trạng thái auth thay đổi
             if (taskListenerUnsubscribe) {
                 taskListenerUnsubscribe();
                 taskListenerUnsubscribe = null;
             }
 
             if (user) {
-                // Người dùng đã đăng nhập
                 await loadInitialData(user);
             } else {
-                // Người dùng đã đăng xuất
                 currentUserProfile = null;
                 allTasks = [];
                 filteredTasks = [];
@@ -322,8 +380,7 @@
                 dashboardContainer.classList.add('hidden');
                 sessionStorage.removeItem('welcomeShown');
                 resetAuthFormUI();
-                updateNotificationBell(0); // Reset chuông
-                
+                updateNotificationBell(0); 
                 hideLoginNotification(); 
             }
         });
@@ -390,16 +447,16 @@
 
                 hideLoginNotification();
                 showNotification("Đăng nhập thành công!");
-                loginButton.disabled = false; // Kích hoạt lại nút phòng khi user đăng xuất
+                loginButton.disabled = false; 
 
             } catch (error) {
                 console.error("Lỗi khi tải dữ liệu ban đầu: ", error);
                 const errorMessage = error.message || "Có lỗi xảy ra khi tải dữ liệu.";
                 
-                await signOut(auth); // Đăng xuất người dùng
+                await signOut(auth); 
                 
                 showLoginNotification(errorMessage, true, false);
-                loginButton.disabled = false; // Kích hoạt lại nút
+                loginButton.disabled = false; 
             }
         }
         
@@ -414,6 +471,12 @@
             document.getElementById('closeWelcomeButton').addEventListener('click', closeWelcomeModal);
             document.getElementById('cancelTaskButton').addEventListener('click', closeTaskModal);
             document.getElementById('logoutButton').addEventListener('click', () => signOut(auth));
+
+            // BỔ SUNG: Gắn sự kiện cho các modal mới
+            document.getElementById('changePasswordButton').onclick = openChangePasswordModal;
+            document.getElementById('cancelChangePassword').onclick = closeChangePasswordModal;
+            document.getElementById('changePasswordForm').onsubmit = handleChangePassword;
+            document.getElementById('closeChartModal').onclick = closeChartModal;
 
             setupNotificationBellListeners();
 
@@ -517,7 +580,7 @@
             try {
                 updateKPIs(data);
                 updateCharts(data);
-            } catch (error) { // <-- SỬA LỖI: Đã thêm {
+            } catch (error) { 
                 console.error("Lỗi khi cập nhật phân tích:", error);
                 showNotification("Không thể cập nhật dữ liệu cho biểu đồ.", true);
             }
@@ -807,19 +870,13 @@
             return date.toLocaleString('vi-VN');
         }
         
-        /**
-         * Chuyển đổi chuỗi ngày dd/mm/yyyy sang đối tượng Date
-         * @param {string} dateString - Chuỗi ngày (ví dụ: "25/10/2025")
-         * @returns {Date|null} - Đối tượng Date hoặc null nếu không hợp lệ
-         */
         function parseDmy(dateString) {
             if (!dateString) return null;
             const parts = dateString.split('/');
             if (parts.length !== 3) return null;
             
-            // new Date(year, monthIndex, day)
             const day = parseInt(parts[0], 10);
-            const month = parseInt(parts[1], 10) - 1; // Tháng trong JS bắt đầu từ 0
+            const month = parseInt(parts[1], 10) - 1; 
             const year = parseInt(parts[2], 10);
             
             const date = new Date(year, month, day);
@@ -851,21 +908,60 @@
         function updateKPIs(data) { 
             document.getElementById('kpis').innerHTML = `<div class="kpi-card section-card border-t-4 border-blue-500"><p class="text-sm text-slate-500">Tổng CV theo bộ lọc</p><p class="text-2xl font-bold">${data.length}</p></div><div class="kpi-card section-card border-t-4 border-green-500"><p class="text-sm text-slate-500">Hoàn thành</p><p class="text-2xl font-bold text-green-600">${data.filter(t=>t['Trạng thái']==='Đã Hoàn Thành').length}</p></div><div class="kpi-card section-card border-t-4 border-red-500"><p class="text-sm text-slate-500">Quá hạn</p><p class="text-2xl font-bold text-red-600">${data.filter(t=>getWarningStatus(t).label==='Quá Hạn').length}</p></div><div class="kpi-card section-card border-t-4 border-yellow-500"><p class="text-sm text-slate-500">Sắp đến hạn</p><p class="text-2xl font-bold text-yellow-600">${data.filter(t=>getWarningStatus(t).label==='Sắp đến hạn').length}</p></div>`; 
         }
+        
+        // === SỬA ĐỔI: Hàm updateCharts ===
         function updateCharts(data) {
             const chartsContainer = document.getElementById('charts');
             chartsContainer.innerHTML = `<div class="section-card"><h3 class="text-lg font-semibold text-center mb-4 text-slate-700">Tỷ lệ Trạng thái</h3><div class="chart-container"><canvas id="statusChart"></canvas></div></div><div class="section-card"><h3 class="text-lg font-semibold text-center mb-4 text-slate-700">Khối lượng Công việc</h3><div class="chart-container"><canvas id="workloadChart"></canvas></div></div><div class="section-card md:col-span-2 lg:col-span-1"><h3 class="text-lg font-semibold text-center mb-4 text-slate-700">Tình trạng theo Loại CV</h3><div class="chart-container"><canvas id="taskTypeStatusChart"></canvas></div></div>`;
+            
             if(typeof ChartDataLabels !== 'undefined') { Chart.register(ChartDataLabels); }
             const DATALABELS_CONFIG = { formatter: v => v > 0 ? v : '', color: '#fff', font: { weight: 'bold' } };
             const CORE_STATUSES = { 'Đã Hoàn Thành': '#22c55e', 'Đang Thực Hiện': '#3b82f6', 'Quá Hạn': '#ef4444', 'Sắp đến hạn': '#f59e0b' };
             const ALL_STATUSES = Object.keys(CORE_STATUSES);
-            if (statusChart) statusChart.destroy(); if (workloadChart) workloadChart.destroy(); if (taskTypeStatusChart) taskTypeStatusChart.destroy();
+            
+            if (statusChart) statusChart.destroy(); 
+            if (workloadChart) workloadChart.destroy(); 
+            if (taskTypeStatusChart) taskTypeStatusChart.destroy();
+            if (fullscreenChart) fullscreenChart.destroy(); // Hủy biểu đồ toàn màn hình (nếu có)
+            
+            // --- Biểu đồ 1: Tỷ lệ Trạng thái ---
             const statusCounts = ALL_STATUSES.reduce((a, s) => ({...a, [s]: 0}), {});
             data.forEach(t => { const s = getOverallStatus(t); if (s in statusCounts) statusCounts[s]++; });
-            statusChart = new Chart('statusChart', { type: 'doughnut', data: { labels: ALL_STATUSES, datasets: [{ data: ALL_STATUSES.map(s => statusCounts[s]), backgroundColor: ALL_STATUSES.map(s => CORE_STATUSES[s]) }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }, datalabels: DATALABELS_CONFIG } } });
+            statusChart = new Chart('statusChart', { 
+                type: 'doughnut', 
+                data: { labels: ALL_STATUSES, datasets: [{ data: ALL_STATUSES.map(s => statusCounts[s]), backgroundColor: ALL_STATUSES.map(s => CORE_STATUSES[s]) }] }, 
+                options: { 
+                    responsive: true, maintainAspectRatio: false, 
+                    plugins: { legend: { position: 'bottom' }, datalabels: DATALABELS_CONFIG },
+                    onClick: (e, elements, chart) => showChartInFullscreen(chart) // BỔ SUNG: Sự kiện click
+                } 
+            });
+            
+            // --- Biểu đồ 2: Khối lượng Công việc ---
             const assignees = [...new Set(data.map(t => t.nguoiPhuTrach))].filter(Boolean).sort();
-            workloadChart = new Chart('workloadChart', { type: 'bar', data: { labels: assignees, datasets: ALL_STATUSES.map(s => ({ label: s, data: assignees.map(a => data.filter(t => t['nguoiPhuTrach'] === a && getOverallStatus(t) === s).length), backgroundColor: CORE_STATUSES[s] })) }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } }, plugins: { legend: { position: 'bottom' }, datalabels: DATALABELS_CONFIG } } });
+            workloadChart = new Chart('workloadChart', { 
+                type: 'bar', 
+                data: { labels: assignees, datasets: ALL_STATUSES.map(s => ({ label: s, data: assignees.map(a => data.filter(t => t['nguoiPhuTrach'] === a && getOverallStatus(t) === s).length), backgroundColor: CORE_STATUSES[s] })) }, 
+                options: { 
+                    responsive: true, maintainAspectRatio: false, 
+                    scales: { x: { stacked: true }, y: { stacked: true } }, 
+                    plugins: { legend: { position: 'bottom' }, datalabels: DATALABELS_CONFIG },
+                    onClick: (e, elements, chart) => showChartInFullscreen(chart) // BỔ SUNG: Sự kiện click
+                } 
+            });
+            
+            // --- Biểu đồ 3: Tình trạng theo Loại CV ---
             const taskTypes = [...new Set(data.map(t => t['Loại công việc']))].filter(Boolean);
-            taskTypeStatusChart = new Chart('taskTypeStatusChart', { type: 'bar', data: { labels: taskTypes, datasets: ALL_STATUSES.map(s => ({ label: s, data: taskTypes.map(type => data.filter(t => t['Loại công việc'] === type && getOverallStatus(t) === s).length), backgroundColor: CORE_STATUSES[s] })) }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } }, plugins: { legend: { position: 'bottom' }, datalabels: DATALABELS_CONFIG } } });
+            taskTypeStatusChart = new Chart('taskTypeStatusChart', { 
+                type: 'bar', 
+                data: { labels: taskTypes, datasets: ALL_STATUSES.map(s => ({ label: s, data: taskTypes.map(type => data.filter(t => t['Loại công việc'] === type && getOverallStatus(t) === s).length), backgroundColor: CORE_STATUSES[s] })) }, 
+                options: { 
+                    indexAxis: 'y', responsive: true, maintainAspectRatio: false, 
+                    scales: { x: { stacked: true }, y: { stacked: true } }, 
+                    plugins: { legend: { position: 'bottom' }, datalabels: DATALABELS_CONFIG },
+                    onClick: (e, elements, chart) => showChartInFullscreen(chart) // BỔ SUNG: Sự kiện click
+                } 
+            });
         }
         
         function showNotification(message, isError = false) {
@@ -924,6 +1020,8 @@
                     return 'Email này đã được sử dụng.';
                 case 'auth/weak-password':
                     return 'Mật khẩu quá yếu. Vui lòng chọn mật khẩu khác.';
+                case 'auth/requires-recent-login':
+                    return 'Vui lòng đăng nhập lại trước khi đổi mật khẩu.';
                 default:
                     return 'Đã có lỗi xảy ra. Vui lòng thử lại.';
             }
@@ -1027,10 +1125,8 @@
                 let currentList;
 
                 if (field === 'nguoiPhuTrach' && (currentUserProfile.role === 'leader' || currentUserProfile.role === 'admin')) {
-                    // SỬA: Lấy danh sách từ allUsersData để có danh sách đầy đủ
                     currentList = allUsersData.filter(u => u.role !== 'pending').map(u => u.name).sort();
                 } else if (field === 'nguoiPhuTrach') {
-                    // Member chỉ thấy tên mình (hoặc danh sách nếu cần - nhưng logic hiện tại là chỉ thấy tên mình)
                     currentList = [currentUserProfile.name]; 
                 } else {
                     const allAssignees = allUsersData.filter(u => u.role !== 'pending').map(u => u.name);
@@ -1077,13 +1173,105 @@
             setTimeout(() => { modal.classList.add('hidden'); }, 300);
         }
         
+        // --- BỔ SUNG: CÁC HÀM CHO MODAL MỚI ---
+        
+        // --- Đổi mật khẩu ---
+        function openChangePasswordModal() {
+            document.getElementById('changePasswordForm').reset();
+            document.getElementById('changePasswordModal').classList.remove('hidden');
+        }
+        function closeChangePasswordModal() {
+            document.getElementById('changePasswordModal').classList.add('hidden');
+        }
+        async function handleChangePassword(e) {
+            e.preventDefault();
+            const oldPassword = document.getElementById('oldPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmNewPassword = document.getElementById('confirmNewPassword').value;
+
+            if (newPassword !== confirmNewPassword) {
+                showNotification("Mật khẩu mới và xác nhận không khớp!", true);
+                return;
+            }
+            if (newPassword.length < 6) {
+                showNotification("Mật khẩu mới phải có ít nhất 6 ký tự.", true);
+                return;
+            }
+
+            const user = auth.currentUser;
+            if (!user) {
+                showNotification("Không tìm thấy người dùng. Vui lòng đăng nhập lại.", true);
+                return;
+            }
+
+            const submitButton = e.target.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
+            showNotification("Đang xử lý...", false);
+
+            try {
+                // 1. Lấy thông tin xác thực
+                const credential = EmailAuthProvider.credential(user.email, oldPassword);
+                
+                // 2. Xác thực lại người dùng
+                await reauthenticateWithCredential(user, credential);
+                
+                // 3. Đổi mật khẩu
+                await updatePassword(user, newPassword);
+                
+                showNotification("Đổi mật khẩu thành công!", false);
+                closeChangePasswordModal();
+
+            } catch (error) {
+                console.error("Lỗi đổi mật khẩu:", error);
+                showNotification(getFirebaseAuthErrorMessage(error.code), true);
+            } finally {
+                submitButton.disabled = false;
+            }
+        }
+
+        // --- Biểu đồ toàn màn hình ---
+        function showChartInFullscreen(chartInstance) {
+            const modal = document.getElementById('chartModal');
+            const canvas = document.getElementById('fullscreenChartCanvas');
+            const ctx = canvas.getContext('2d');
+
+            // Hủy biểu đồ cũ (nếu có) trước khi vẽ cái mới
+            if (fullscreenChart) {
+                fullscreenChart.destroy();
+            }
+
+            // Sao chép cấu hình
+            const newOptions = JSON.parse(JSON.stringify(chartInstance.options));
+            // Tối ưu hóa cho toàn màn hình
+            newOptions.maintainAspectRatio = false; // Rất quan trọng
+            newOptions.plugins.legend.position = 'top'; // Chuyển chú thích lên trên
+            
+            // Xóa sự kiện onClick trong biểu đồ toàn màn hình để tránh lặp
+            delete newOptions.onClick; 
+
+            // Vẽ biểu đồ mới
+            fullscreenChart = new Chart(ctx, {
+                type: chartInstance.config.type,
+                data: chartInstance.data,
+                options: newOptions
+            });
+
+            modal.classList.remove('hidden');
+        }
+        function closeChartModal() {
+            document.getElementById('chartModal').classList.add('hidden');
+            // Hủy biểu đồ khi đóng để giải phóng bộ nhớ
+            if (fullscreenChart) {
+                fullscreenChart.destroy();
+                fullscreenChart = null;
+            }
+        }
         
 
 
 	// --- HÀM XỬ LÝ EXCEL ---
         function downloadTemplate() { 
             const displayHeaders = TASK_FIELDS.map(f => f === 'nguoiPhuTrach' ? 'Người phụ trách' : f); 
-            // KHÔNG thêm cột ID vào file mẫu
             const worksheet = XLSX.utils.aoa_to_sheet([displayHeaders]); 
             const workbook = XLSX.utils.book_new(); 
             XLSX.utils.book_append_sheet(workbook, worksheet, 'Tasks'); 
@@ -1094,7 +1282,6 @@
             showNotification("Đang chuẩn bị dữ liệu để xuất file...");
             if (filteredTasks.length === 0) { showNotification("Không có dữ liệu nào để kết xuất.", true); return; }
 
-            // Thêm cột 'ID' vào đầu tiên khi xuất file
             const headers = ['ID', ...TASK_FIELDS.map(h => h === 'nguoiPhuTrach' ? 'Người phụ trách' : h), 'Ngày thay đổi cuối', 'Cảnh Báo'];
             const dataRows = filteredTasks.map(task => [
                 task.id || '', 
@@ -1110,7 +1297,6 @@
             showNotification("Kết xuất file Excel thành công!");
         }
         
-        // === BẮT ĐẦU SỬA ĐỔI: Hàm importFromExcel ===
         async function importFromExcel(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -1121,27 +1307,22 @@
                 const workbook = XLSX.read(data);
                 const worksheet = workbook.Sheets[workbook.SheetNames[0]];
                 
-                // Đọc dữ liệu JSON
-                const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false }); // raw:false để định dạng ngày
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false }); 
 
                 if (jsonData.length === 0) {
                     showNotification("File Excel rỗng hoặc không có dữ liệu.", true);
                     return;
                 }
 
-                // Lấy tiêu đề thực tế từ dòng đầu tiên
                 const actualHeaders = Object.keys(jsonData[0]);
-                
-                // Kiểm tra xem file có cột ID không
                 const hasIdColumn = actualHeaders.includes('ID'); 
                 
-                // Nếu không có cột ID, nó phải tuân theo quy tắc tạo mới
                 const mandatoryCreateHeaders = ['Loại công việc', 'MST', 'Người phụ trách'];
                 if (!hasIdColumn) {
                     const missingHeaders = mandatoryCreateHeaders.filter(h => !actualHeaders.includes(h));
                     if (missingHeaders.length > 0) {
                         alert(`Đây là file TẠO MỚI (không có cột ID). File của bạn thiếu các cột bắt buộc sau: ${missingHeaders.join(', ')}`);
-                        event.target.value = ''; // Reset input
+                        event.target.value = ''; 
                         return;
                     }
                 }
@@ -1151,30 +1332,24 @@
                 const batch = writeBatch(db);
                 let successfulImports = 0;
                 let successfulUpdates = 0;
-                let failedRows = []; // Dòng bị lỗi (ví dụ: ID không tìm thấy)
-                let skippedRows = []; // Dòng bị bỏ qua (ví dụ: thiếu thông tin bắt buộc khi tạo mới)
+                let failedRows = []; 
+                let skippedRows = []; 
 
-                // Lặp qua từng dòng dữ liệu trong file Excel
                 for (const [index, row] of jsonData.entries()) {
                     const taskId = row['ID'] || null;
 
                     if (taskId) {
                         // --- LOGIC CẬP NHẬT ---
-                        // 1. Kiểm tra xem ID này có tồn tại trong danh sách allTasks không
                         const existingTask = allTasks.find(t => t.id === taskId);
                         
                         if (existingTask) {
                             const taskData = {};
-                            // Lặp qua các trường TÁC VỤ (TASK_FIELDS)
                             TASK_FIELDS.forEach(internalField => {
-                                // Tìm tên hiển thị tương ứng (ví dụ: 'nguoiPhuTrach' -> 'Người phụ trách')
                                 const displayName = (internalField === 'nguoiPhuTrach' ? 'Người phụ trách' : internalField);
                                 
-                                // 2. Chỉ cập nhật nếu cột đó tồn tại trong file Excel (row)
                                 if (row.hasOwnProperty(displayName)) {
                                     let value = row[displayName];
                                     
-                                    // Xử lý định dạng ngày (giống logic nhập cũ)
                                     if ((internalField === 'Ngày giao' || internalField === 'Hạn xử lý') && typeof value === 'number') {
                                         const jsDate = new Date(Math.round((value - 25569) * 86400 * 1000));
                                         const day = String(jsDate.getDate()).padStart(2, '0');
@@ -1185,39 +1360,34 @@
                                         taskData[internalField] = value || '';
                                     }
                                 }
-                                // Nếu cột không tồn tại trong Excel, KHÔNG LÀM GÌ CẢ (để giữ nguyên dữ liệu cũ)
                             });
 
-                            // 3. Cập nhật thông tin sửa đổi
                             taskData.lastModified = serverTimestamp();
                             taskData.modifiedBy = auth.currentUser.email;
 
-                            // 4. Thêm vào batch (dùng SET + MERGE)
                             const docRef = doc(db, "tasks", taskId);
-                            batch.set(docRef, taskData, { merge: true }); // merge: true là quan trọng nhất
+                            batch.set(docRef, taskData, { merge: true }); 
                             successfulUpdates++;
 
                         } else {
-                            // ID có trong file nhưng không tìm thấy trong DB
                             failedRows.push({ row: index + 2, reason: `ID "${taskId}" không tìm thấy.` });
                         }
                     
                     } else {
-                        // --- LOGIC TẠO MỚI (Giữ nguyên logic cũ) ---
+                        // --- LOGIC TẠO MỚI ---
                         const loaiCongViec = row['Loại công việc'];
                         const mst = row['MST'];
                         const nguoiPhuTrach = row['Người phụ trách'];
 
                         if (!loaiCongViec || !mst || !nguoiPhuTrach) {
-                            skippedRows.push(index + 2); // Bỏ qua do thiếu dữ liệu bắt buộc
-                            continue; // Bỏ qua dòng này, đi đến dòng tiếp theo
+                            skippedRows.push(index + 2); 
+                            continue; 
                         }
                         
                         const newTask = {};
                         TASK_FIELDS.forEach(field => {
                             const displayName = (field === 'nguoiPhuTrach' ? 'Người phụ trách' : field);
                             if (row.hasOwnProperty(displayName)) {
-                                // Xử lý định dạng ngày (giống logic nhập cũ)
                                 if ((field === 'Ngày giao' || field === 'Hạn xử lý') && typeof row[displayName] === 'number') {
                                     const jsDate = new Date(Math.round((row[displayName] - 25569) * 86400 * 1000));
                                     const day = String(jsDate.getDate()).padStart(2, '0');
@@ -1241,7 +1411,7 @@
                         batch.set(docRef, newTask);
                         successfulImports++;
                     }
-                } // Hết vòng lặp for
+                } 
 
                 // --- XỬ LÝ KẾT QUẢ ---
                 let summaryMessages = [];
@@ -1252,18 +1422,16 @@
                     alert(`Lưu ý: ${skippedRows.length} dòng TẠO MỚI đã bị bỏ qua do thiếu dữ liệu ở các cột bắt buộc (Loại công việc, MST, Người phụ trách).\nCác dòng bị bỏ qua: ${skippedRows.join(', ')}`);
                 }
                 if (failedRows.length > 0) {
-                    // Chỉ hiển thị lỗi đầu tiên để tránh alert quá dài
                     alert(`Lỗi: ${failedRows.length} dòng CẬP NHẬT đã thất bại.\nChi tiết (lỗi đầu tiên): Dòng ${failedRows[0].row}, Lý do: ${failedRows[0].reason}`);
                 }
 
                 if (successfulImports > 0 || successfulUpdates > 0) {
                     await batch.commit();
-                    await fetchAllData(); // Tải lại dữ liệu
+                    await fetchAllData(); 
                     showNotification(summaryMessages.join(' ') || "Hoàn tất xử lý file.");
                 } else if (summaryMessages.length === 0 && skippedRows.length === 0 && failedRows.length === 0) {
                     showNotification("Không có thay đổi nào được thực hiện.", true);
                 } else {
-                    // Trường hợp chỉ có lỗi hoặc skip
                     showNotification("Hoàn tất xử lý file. Vui lòng xem thông báo chi tiết (nếu có).", false);
                 }
             
@@ -1271,17 +1439,11 @@
                 console.error("Lỗi khi nhập từ Excel:", error);
                 showNotification("Có lỗi nghiêm trọng xảy ra khi nhập file.", true);
             } finally {
-                event.target.value = ''; // Reset input file
+                event.target.value = ''; 
             }
         }
-        // === KẾT THÚC SỬA ĐỔI ===
 
         // --- CÁC HÀM MỚI CHO TÍNH NĂNG THÔNG BÁO ---
-
-        /**
-         * Cập nhật số trên biểu tượng chuông
-         * @param {number} count - Số lượng thông báo mới
-         */
         function updateNotificationBell(count) {
             const badge = document.getElementById('notificationBadge');
             if (count > 0) {
@@ -1292,13 +1454,10 @@
             }
         }
 
-        /**
-         * Hiển thị danh sách công việc mới trong dropdown
-         */
         function renderNewTasksDropdown() {
             const listEl = document.getElementById('notificationList');
             const dropdown = document.getElementById('notificationDropdown');
-            listEl.innerHTML = ''; // Xóa danh sách cũ
+            listEl.innerHTML = ''; 
 
             if (newlyAssignedTasks.length === 0) {
                 listEl.innerHTML = '<li class="p-4 text-center text-sm text-slate-500">Không có thông báo mới.</li>';
@@ -1312,7 +1471,6 @@
                     <p class="font-semibold text-sm text-slate-700">${task['Loại công việc'] || 'Công việc mới'}</p>
                     <p class="text-sm text-slate-500 truncate">NNT: ${task['Tên NNT'] || task['MST'] || 'N/A'}</p>
                 `;
-                // Khi click vào thông báo, mở modal sửa task và đóng dropdown
                 li.onclick = () => {
                     openTaskModal(task);
                     dropdown.classList.add('hidden');
@@ -1321,22 +1479,17 @@
             });
         }
 
-        /**
-         * Gắn sự kiện cho chuông và xử lý click bên ngoài
-         */
         function setupNotificationBellListeners() {
             const bellButton = document.getElementById('notificationBellButton');
             const dropdown = document.getElementById('notificationDropdown');
             const bellContainer = document.getElementById('notificationBell');
 
             bellButton.addEventListener('click', (e) => {
-                e.stopPropagation(); // Ngăn sự kiện click lan ra window
-                // Tải lại danh sách trước khi hiển thị
+                e.stopPropagation(); 
                 renderNewTasksDropdown();
                 dropdown.classList.toggle('hidden');
             });
 
-            // Đóng dropdown khi click bên ngoài
             window.addEventListener('click', (e) => {
                 if (!bellContainer.contains(e.target) && !dropdown.classList.contains('hidden')) {
                     dropdown.classList.add('hidden');
@@ -1344,16 +1497,11 @@
             });
         }
         
-        /**
-         * Thiết lập listener real-time cho công việc mới KHI ĐÃ ĐĂNG NHẬP
-         * @param {string} userId - ID của user hiện tại
-         * @param {string} userName - Tên của user hiện tại
-         */
         function setupTaskListener(userId, userName) {
             const q = query(
                 collection(db, "tasks"),
                 where("nguoiPhuTrach", "==", userName),
-                where("createdAt", ">", new Date()) // Chỉ lấy các task tạo từ bây giờ
+                where("createdAt", ">", new Date()) 
             );
 
             taskListenerUnsubscribe = onSnapshot(q, (snapshot) => {
