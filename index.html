@@ -192,10 +192,10 @@
                  <div class="flex flex-wrap justify-between items-center mb-4">
                     <h2 class="text-xl font-semibold text-slate-700">Bộ lọc và Tìm kiếm</h2>
                     <div class="flex items-center space-x-2">
-                        <button id="downloadTemplateButton" class="px-4 py-2 text-sm bg-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-300 transition-colors">Tải file mẫu</button>
+                        <button id="downloadTemplateButton" class="px-4 py-2 text-sm bg-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-300 transition-colors">Tải file mẫu (Thêm mới)</button> <!-- Sửa tên nút cho rõ -->
                         <input type="file" id="importExcelInput" class="hidden" accept=".xlsx, .xls">
-                        <button id="importExcelButton" class="px-4 py-2 text-sm bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition-colors">Nhập từ Excel</button>
-                        <button id="exportExcelButton" class="px-4 py-2 text-sm bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors">Kết xuất Excel</button>
+                        <button id="importExcelButton" class="px-4 py-2 text-sm bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition-colors">Nhập Excel (Thêm/Cập nhật)</button> <!-- Sửa tên nút cho rõ -->
+                        <button id="exportExcelButton" class="px-4 py-2 text-sm bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors">Kết xuất Excel (Có ID)</button> <!-- Sửa tên nút cho rõ -->
                         <button id="addTaskButton" class="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">+ Thêm Công Việc Mới</button>
                     </div>
                 </div>
@@ -286,8 +286,6 @@
         // **NEW**: Biến cho tính năng thông báo
         let newlyAssignedTasks = [];
         let taskListenerUnsubscribe = null; // Biến để lưu hàm hủy listener
-        // XÓA: authTaskListenerUnsubscribe
-        // let authTaskListenerUnsubscribe = null; 
 
         const PAGE_SIZE = 20; 
         let currentPage = 1;
@@ -326,13 +324,11 @@
                 resetAuthFormUI();
                 updateNotificationBell(0); // Reset chuông
                 
-                // **SỬA ĐỔI**: Ẩn popup đăng nhập (nếu có) khi quay về màn hình login
                 hideLoginNotification(); 
             }
         });
 
         async function loadInitialData(user) {
-            // **SỬA ĐỔI**: Hiển thị thông báo đang tải dữ liệu
             showLoginNotification("Đang tải dữ liệu người dùng...", false, true);
             const loginButton = document.getElementById('loginForm').querySelector('button');
 
@@ -392,19 +388,16 @@
                 setupTaskListener(user.uid, currentUserProfile.name);
                 // --- (Kết thúc logic thông báo chuông) ---
 
-                // **SỬA ĐỔI**: Tải xong -> Ẩn popup đăng nhập và hiện popup dashboard
                 hideLoginNotification();
                 showNotification("Đăng nhập thành công!");
                 loginButton.disabled = false; // Kích hoạt lại nút phòng khi user đăng xuất
 
             } catch (error) {
-                // **SỬA ĐỔI**: Xử lý lỗi tinh tế hơn
                 console.error("Lỗi khi tải dữ liệu ban đầu: ", error);
                 const errorMessage = error.message || "Có lỗi xảy ra khi tải dữ liệu.";
                 
                 await signOut(auth); // Đăng xuất người dùng
                 
-                // Hiển thị lỗi trên màn hình đăng nhập (sau khi đã đăng xuất)
                 showLoginNotification(errorMessage, true, false);
                 loginButton.disabled = false; // Kích hoạt lại nút
             }
@@ -422,7 +415,6 @@
             document.getElementById('cancelTaskButton').addEventListener('click', closeTaskModal);
             document.getElementById('logoutButton').addEventListener('click', () => signOut(auth));
 
-            // **NEW**: Gắn sự kiện cho chuông thông báo
             setupNotificationBellListeners();
 
             renderTableHeader();
@@ -436,21 +428,16 @@
             document.getElementById('table-loader').classList.remove('hidden');
             document.getElementById('tasksTableBody').innerHTML = '';
             try {
-                // --- SỬA LỖI INDEX ---
                 let q;
                 if (currentUserProfile && currentUserProfile.role === 'member') {
-                    // 1. Chỉ query theo 'nguoiPhuTrach' để tránh lỗi index
                     q = query(collection(db, "tasks"), where("nguoiPhuTrach", "==", currentUserProfile.name));
                 } else {
-                    // Admin/Leader có thể query và sắp xếp (giả sử có index mặc định hoặc sẽ tạo)
-                    // Nếu admin cũng bị lỗi, chúng ta cũng sẽ bỏ orderBy ở đây
                     q = query(collection(db, "tasks"), orderBy("createdAt", "desc"));
                 }
                 
                 const snapshot = await getDocs(q);
                 allTasks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
                 
-                // 2. Sắp xếp client-side (bằng JS) nếu là 'member'
                 if (currentUserProfile && currentUserProfile.role === 'member') {
                     allTasks.sort((a, b) => {
                         const timeA = a.createdAt ? a.createdAt.toDate().getTime() : 0;
@@ -458,7 +445,6 @@
                         return timeB - timeA; // Sắp xếp giảm dần (mới nhất trước)
                     });
                 }
-                // --- KẾT THÚC SỬA LỖI INDEX ---
                 
                 applyFiltersAndRender(); 
             } catch (error) {
@@ -470,7 +456,6 @@
         }
 
         function applyFiltersAndRender() {
-            // ... (Nội dung hàm này giữ nguyên)
             const type = document.getElementById('taskTypeFilter').value;
             const assignee = document.getElementById('assigneeFilter').value;
             const coreStatus = document.getElementById('statusFilter').value;
@@ -479,20 +464,14 @@
             const searchId = document.getElementById('searchIdFilter').value.trim().toLowerCase();
             const warningStatus = document.getElementById('warningFilter').value;
 
-            // === BẮT ĐẦU THAY ĐỔI: Lấy giá trị bộ lọc ngày ===
             const dateFrom = document.getElementById('dateFromFilter').value; // 'yyyy-mm-dd'
             const dateTo = document.getElementById('dateToFilter').value;     // 'yyyy-mm-dd'
 
-            // Chuyển đổi sang đối tượng Date để so sánh
-            // new Date('yyyy-mm-dd') sẽ hiểu là 00:00:00 giờ địa phương
             const dateFromObj = dateFrom ? new Date(dateFrom) : null;
             const dateToObj = dateTo ? new Date(dateTo) : null;
             
-            // Đặt giờ 00:00:00 cho ngày bắt đầu
             if (dateFromObj && !isNaN(dateFromObj)) dateFromObj.setHours(0, 0, 0, 0);
-            // Đặt giờ 23:59:59 cho ngày kết thúc để bao gồm cả ngày đó
             if (dateToObj && !isNaN(dateToObj)) dateToObj.setHours(23, 59, 59, 999);
-            // === KẾT THÚC THAY ĐỔI ===
 
             filteredTasks = allTasks.filter(task => {
                 const typeMatch = type === 'all' || task['Loại công việc'] === type;
@@ -512,17 +491,12 @@
                 const warningInfo = getWarningStatus(task);
                 const warningMatch = (warningStatus === 'all') || (warningStatus === 'Không có' && !warningInfo.label && task['Trạng thái'] !== 'Đã Hoàn Thành') || (warningInfo.label === warningStatus);
                 
-                // === BẮT ĐẦU THAY ĐỔI: Thêm logic lọc ngày ===
                 const taskNgayGiaoStr = task['Ngày giao'];
-                const taskNgayGiaoObj = parseDmy(taskNgayGiaoStr); // Sử dụng hàm parseDmy mới
+                const taskNgayGiaoObj = parseDmy(taskNgayGiaoStr); 
                 
-                // Nếu không có ngày bắt đầu, thì luôn khớp
                 const dateFromMatch = !dateFromObj || (taskNgayGiaoObj && taskNgayGiaoObj >= dateFromObj);
-                // Nếu không có ngày kết thúc, thì luôn khớp
                 const dateToMatch = !dateToObj || (taskNgayGiaoObj && taskNgayGiaoObj <= dateToObj);
-                // === KẾT THÚC THAY ĐỔI ===
 
-                // Thêm dateFromMatch và dateToMatch vào điều kiện return
                 return typeMatch && assigneeMatch && statusMatch && mstMatch && nntMatch && idMatch && warningMatch && dateFromMatch && dateToMatch;
             });
             
@@ -532,7 +506,6 @@
         }
         
         function renderCurrentPage() {
-            // ... (Nội dung hàm này giữ nguyên)
             const start = (currentPage - 1) * PAGE_SIZE;
             const end = start + PAGE_SIZE;
             const pageTasks = filteredTasks.slice(start, end);
@@ -541,11 +514,10 @@
         }
         
         function updateAnalytics(data) {
-            // ... (Nội dung hàm này giữ nguyên)
             try {
                 updateKPIs(data);
                 updateCharts(data);
-            } catch (error) {
+            } catch (error) { // <-- SỬA LỖI: Đã thêm {
                 console.error("Lỗi khi cập nhật phân tích:", error);
                 showNotification("Không thể cập nhật dữ liệu cho biểu đồ.", true);
             }
@@ -553,7 +525,6 @@
 
         // --- CÁC HÀM HIỂN THỊ (RENDER) ---
         function renderTable(data) {
-            // ... (Nội dung hàm này giữ nguyên)
             const tableBody = document.getElementById('tasksTableBody');
             tableBody.innerHTML = '';
             document.getElementById('no-results').classList.toggle('hidden', data.length > 0);
@@ -575,7 +546,6 @@
         }
         
         function renderPaginationControls() {
-            // ... (Nội dung hàm này giữ nguyên)
             const el = document.getElementById('paginationControls');
             const totalPages = Math.ceil(filteredTasks.length / PAGE_SIZE);
             const hasNext = currentPage < totalPages;
@@ -606,7 +576,6 @@
         // --- BỘ LỌC VÀ SỰ KIỆN ---
         async function populateFilters() {
             const filtersContainer = document.getElementById('filters');
-            // === BẮT ĐẦU THAY ĐỔI: Thêm 2 trường date picker vào HTML ===
             filtersContainer.innerHTML = `
                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
@@ -658,10 +627,7 @@
                         <input type="date" id="dateToFilter" class="w-full p-2 border rounded-lg">
                     </div>
                 </div>`;
-            // === KẾT THÚC THAY ĐỔI ===
             
-            // SỬA LỖI INDEX: (Tương tự fetchAllData)
-            // Dùng logic query đã sửa để tránh lỗi khi tải bộ lọc
             let filterPopulationQuery;
             if (currentUserProfile && currentUserProfile.role === 'member') {
                 filterPopulationQuery = query(collection(db, "tasks"), where("nguoiPhuTrach", "==", currentUserProfile.name));
@@ -692,15 +658,12 @@
             };
 
             filtersContainer.querySelectorAll('select').forEach(el => el.addEventListener('change', triggerFilter));
-            // === BẮT ĐẦU THAY ĐỔI: Tách listener cho input text và date ===
             filtersContainer.querySelectorAll('input[type="text"]').forEach(el => el.addEventListener('input', debouncedFilter));
             filtersContainer.querySelectorAll('input[type="date"]').forEach(el => el.addEventListener('change', triggerFilter));
-            // === KẾT THÚC THAY ĐỔI ===
         }
 
         // --- CRUD ---
         async function saveTask(e) {
-            // ... (Nội dung hàm này giữ nguyên)
             e.preventDefault();
             const taskId = document.getElementById('taskId').value;
             const taskData = {};
@@ -736,7 +699,6 @@
         }
         
         async function deleteTask() {
-            // ... (Nội dung hàm này giữ nguyên)
             if (!confirm('Bạn có chắc chắn muốn xóa công việc này không?')) return;
             const taskId = document.getElementById('taskId').value;
             if (!taskId) return;
@@ -753,7 +715,6 @@
 
         // --- ADMIN FUNCTIONS ---
         function renderAdminSection() {
-            // ... (Nội dung hàm này giữ nguyên)
             const adminSection = document.getElementById('adminSection');
             const pendingList = document.getElementById('pendingUsersList');
             const noPendingMsg = document.getElementById('noPendingUsers');
@@ -805,7 +766,6 @@
         }
 
         async function updateUserRole(userId, newRole) {
-            // ... (Nội dung hàm này giữ nguyên)
              try {
                 await setDoc(doc(db, "users", userId), { role: newRole }, { merge: true });
                 const userIndex = allUsersData.findIndex(u => u.id === userId);
@@ -821,7 +781,6 @@
         }
 
         async function rejectUser(userId) {
-            // ... (Nội dung hàm này giữ nguyên)
             if (!confirm('Bạn có chắc chắn muốn từ chối và xóa người dùng này không?')) return;
             try {
                 await deleteDoc(doc(db, "users", userId));
@@ -836,21 +795,18 @@
         
         // --- CÁC HÀM TIỆN ÍCH KHÁC (UTILITIES) ---
         function renderTableHeader() { 
-            // ... (Nội dung hàm này giữ nguyên)
             document.getElementById('tasksTableHeader').innerHTML = '<th class="px-4 py-3">ID</th>' + 
             TASK_FIELDS.map(h => `<th class="px-4 py-3">${h==='nguoiPhuTrach'?'Người phụ trách':h}</th>`).join('') + 
             '<th class="px-4 py-3">Ngày thay đổi cuối</th><th class="px-4 py-3">Cảnh Báo</th>';
         }
 
         function formatTimestamp(timestamp) {
-            // ... (Nội dung hàm này giữ nguyên)
             if (!timestamp) return '';
             const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
             if (isNaN(date.getTime())) return '';
             return date.toLocaleString('vi-VN');
         }
         
-        // === BẮT ĐẦU THAY ĐỔI: Thêm hàm parseDmy ===
         /**
          * Chuyển đổi chuỗi ngày dd/mm/yyyy sang đối tượng Date
          * @param {string} dateString - Chuỗi ngày (ví dụ: "25/10/2025")
@@ -868,7 +824,6 @@
             
             const date = new Date(year, month, day);
             
-            // Kiểm tra tính hợp lệ của ngày (ví dụ: 31/02/2025 sẽ bị phát hiện)
             if (isNaN(date.getTime()) || date.getDate() !== day || date.getMonth() !== month || date.getFullYear() !== year) {
                 console.warn(`Invalid date string detected: ${dateString}`);
                 return null;
@@ -876,13 +831,10 @@
             
             return date;
         }
-        // === KẾT THÚC THAY ĐỔI ===
 
         function getWarningStatus(task) {
-            // ... (Nội dung hàm này giữ nguyên)
             if (task['Trạng thái'] === 'Đã Hoàn Thành') return {};
             const dueDateStr = task['Hạn xử lý'];
-            // SỬA: Sử dụng hàm parseDmy mới để an toàn hơn
             const dueDate = parseDmy(dueDateStr);
             if (!dueDate) return {};
             
@@ -893,16 +845,13 @@
             return {};
         }
         function getOverallStatus(task) { 
-            // ... (Nội dung hàm này giữ nguyên)
             if (task['Trạng thái'] === 'Đã Hoàn Thành') return 'Đã Hoàn Thành'; const warning = getWarningStatus(task); return warning.label || 'Đang Thực Hiện'; 
         }
 
         function updateKPIs(data) { 
-            // ... (Nội dung hàm này giữ nguyên)
             document.getElementById('kpis').innerHTML = `<div class="kpi-card section-card border-t-4 border-blue-500"><p class="text-sm text-slate-500">Tổng CV theo bộ lọc</p><p class="text-2xl font-bold">${data.length}</p></div><div class="kpi-card section-card border-t-4 border-green-500"><p class="text-sm text-slate-500">Hoàn thành</p><p class="text-2xl font-bold text-green-600">${data.filter(t=>t['Trạng thái']==='Đã Hoàn Thành').length}</p></div><div class="kpi-card section-card border-t-4 border-red-500"><p class="text-sm text-slate-500">Quá hạn</p><p class="text-2xl font-bold text-red-600">${data.filter(t=>getWarningStatus(t).label==='Quá Hạn').length}</p></div><div class="kpi-card section-card border-t-4 border-yellow-500"><p class="text-sm text-slate-500">Sắp đến hạn</p><p class="text-2xl font-bold text-yellow-600">${data.filter(t=>getWarningStatus(t).label==='Sắp đến hạn').length}</p></div>`; 
         }
         function updateCharts(data) {
-            // ... (Nội dung hàm này giữ nguyên)
             const chartsContainer = document.getElementById('charts');
             chartsContainer.innerHTML = `<div class="section-card"><h3 class="text-lg font-semibold text-center mb-4 text-slate-700">Tỷ lệ Trạng thái</h3><div class="chart-container"><canvas id="statusChart"></canvas></div></div><div class="section-card"><h3 class="text-lg font-semibold text-center mb-4 text-slate-700">Khối lượng Công việc</h3><div class="chart-container"><canvas id="workloadChart"></canvas></div></div><div class="section-card md:col-span-2 lg:col-span-1"><h3 class="text-lg font-semibold text-center mb-4 text-slate-700">Tình trạng theo Loại CV</h3><div class="chart-container"><canvas id="taskTypeStatusChart"></canvas></div></div>`;
             if(typeof ChartDataLabels !== 'undefined') { Chart.register(ChartDataLabels); }
@@ -920,7 +869,6 @@
         }
         
         function showNotification(message, isError = false) {
-            // ... (Nội dung hàm này giữ nguyên)
             const popup = document.getElementById('notificationPopup');
             const messageEl = document.getElementById('notificationMessage');
             const container = popup.querySelector('div');
@@ -930,12 +878,7 @@
             popup.classList.add('opacity-100', 'translate-y-0');
             setTimeout(() => { popup.classList.add('opacity-0'); popup.classList.remove('opacity-100'); setTimeout(() => popup.classList.add('hidden', 'translate-y-4'), 300); }, 4000);
         }
-	/**
-         * Hiển thị popup thông báo ở màn hình đăng nhập
-         * @param {string} message - Nội dung thông báo
-         * @param {boolean} isError - true nếu là lỗi (màu đỏ), false là thông báo (màu xanh/xám)
-         * @param {boolean} isLoading - true nếu đang tải (hiện spinner), false là thông báo tĩnh
-         */
+
         function showLoginNotification(message, isError = false, isLoading = true) {
             const popup = document.getElementById('loginNotificationPopup');
             const messageEl = document.getElementById('loginNotificationMessage');
@@ -944,32 +887,24 @@
 
             messageEl.textContent = message;
 
-            // Cập nhật màu sắc
             contentEl.classList.remove('bg-rose-500', 'bg-green-500', 'bg-slate-600');
             if (isError) {
-                contentEl.classList.add('bg-rose-500'); // Lỗi: màu đỏ
+                contentEl.classList.add('bg-rose-500'); 
             } else if (!isLoading) {
-                contentEl.classList.add('bg-green-500'); // Thành công: màu xanh
+                contentEl.classList.add('bg-green-500'); 
             } else {
-                contentEl.classList.add('bg-slate-600'); // Đang tải: màu xám
+                contentEl.classList.add('bg-slate-600'); 
             }
 
-            // Ẩn/hiện spinner
             spinner.classList.toggle('hidden', !isLoading);
-
-            // Hiển thị popup
             popup.classList.remove('hidden', 'opacity-0', 'translate-y-4');
             popup.classList.add('opacity-100', 'translate-y-0');
 
-            // Tự động ẩn nếu là thông báo lỗi hoặc thành công (không phải loading)
             if (!isLoading) {
                 setTimeout(hideLoginNotification, 4000);
             }
         }
 
-        /**
-         * Ẩn popup thông báo ở màn hình đăng nhập
-         */
         function hideLoginNotification() {
             const popup = document.getElementById('loginNotificationPopup');
             popup.classList.add('opacity-0');
@@ -977,9 +912,6 @@
             setTimeout(() => popup.classList.add('hidden', 'translate-y-4'), 300);
         }
 
-        /**
-         * Chuyển mã lỗi Firebase Auth sang tiếng Việt
-         */
         function getFirebaseAuthErrorMessage(code) {
             switch (code) {
                 case 'auth/wrong-password':
@@ -996,7 +928,6 @@
                     return 'Đã có lỗi xảy ra. Vui lòng thử lại.';
             }
         }
-        // --- KẾT THÚC CÁC HÀM MỚI ---
 
 
         // --- HÀM CHO MÀN HÌNH AUTH ---
@@ -1010,27 +941,21 @@
                 const password = document.getElementById('passwordInput').value;
                 const submitButton = e.target.querySelector('button');
 
-                // Vô hiệu hóa nút để tránh click nhiều lần
                 submitButton.disabled = true;
                 
                 if (isLogin) {
-                    // --- LUỒNG ĐĂNG NHẬP ---
                     showLoginNotification("Đang kết nối...", false, true);
                     
                     signInWithEmailAndPassword(auth, email, password)
                         .then(userCredential => {
-                            // **SỬA ĐỔI**: Chuyển sang thông báo "Đang xác thực"
-                            // onAuthStateChanged sẽ tự động kích hoạt loadInitialData
                             showLoginNotification("Đang xác thực... Vui lòng chờ...", false, true);
                         })
                         .catch(error => {
-                            // **SỬA ĐỔI**: Hiển thị lỗi bằng popup
                             showLoginNotification(getFirebaseAuthErrorMessage(error.code), true, false);
-                            submitButton.disabled = false; // Kích hoạt lại nút nếu lỗi
+                            submitButton.disabled = false; 
                         });
 
                 } else {
-                    // --- LUỒNG ĐĂNG KÝ ---
                     const name = document.getElementById('nameInput').value;
                     if (!name) { 
                         showLoginNotification("Vui lòng nhập họ và tên.", true, false);
@@ -1052,21 +977,18 @@
                             });
                         })
                         .then(() => {
-                            // **SỬA ĐỔI**: Thông báo thành công bằng popup
                             showLoginNotification("Đăng ký thành công! Vui lòng chờ phê duyệt.", false, false);
-                            signOut(auth); // Tự động đăng xuất để chờ duyệt
+                            signOut(auth); 
                             submitButton.disabled = false;
                         })
                         .catch(error => {
-                            // **SỬA ĐỔI**: Hiển thị lỗi bằng popup
                             showLoginNotification(getFirebaseAuthErrorMessage(error.code), true, false);
-                            submitButton.disabled = false; // Kích hoạt lại nút nếu lỗi
+                            submitButton.disabled = false; 
                         });
                 }
             });
 
             toggleFormLink.addEventListener('click', (e) => {
-                // ... (Nội dung hàm này giữ nguyên)
                 e.preventDefault();
                 isLogin = !isLogin;
                 const nameInput = document.getElementById('nameInput');
@@ -1079,7 +1001,6 @@
         }
 
         function resetAuthFormUI() {
-            // ... (Nội dung hàm này giữ nguyên)
             isLogin = true;
             document.getElementById('nameInput').classList.add('hidden');
             document.getElementById('nameInput').required = false;
@@ -1091,7 +1012,6 @@
         
         // --- HÀM MỞ/ĐÓNG MODAL ---
         function openTaskModal(task = null) {
-            // ... (Nội dung hàm này giữ nguyên)
             const form = document.getElementById('taskForm');
             form.reset();
             const formContainer = form.querySelector('div.grid');
@@ -1104,23 +1024,21 @@
                 if (displayName.includes('Tên NNT') || displayName.includes('Ghi chú')) div.className = 'md:col-span-2';
                 
                 let inputHtml;
-                // SỬA LỖI: Xóa định nghĩa `allAssignees` bị trùng lặp ở đây
                 let currentList;
 
                 if (field === 'nguoiPhuTrach' && (currentUserProfile.role === 'leader' || currentUserProfile.role === 'admin')) {
-                    currentList = [...new Set(allTasks.map(t => t.nguoiPhuTrach).filter(Boolean))].sort();
+                    // SỬA: Lấy danh sách từ allUsersData để có danh sách đầy đủ
+                    currentList = allUsersData.filter(u => u.role !== 'pending').map(u => u.name).sort();
+                } else if (field === 'nguoiPhuTrach') {
+                    // Member chỉ thấy tên mình (hoặc danh sách nếu cần - nhưng logic hiện tại là chỉ thấy tên mình)
+                    currentList = [currentUserProfile.name]; 
                 } else {
                     const allAssignees = allUsersData.filter(u => u.role !== 'pending').map(u => u.name);
-
-                    // --- BẮT ĐẦU SỬA ĐỔI (LOGIC LẤY LOẠI CÔNG VIỆC) ---
+                    
                     if (field === 'Loại công việc') {
-                        // Lấy các loại CV động từ allTasks (giống như bộ lọc)
                         const dynamicTaskTypes = allTasks.map(task => task['Loại công việc']).filter(Boolean);
-                        // Kết hợp với danh sách định sẵn, loại bỏ trùng lặp và sắp xếp
                         currentList = [...new Set([...PREDEFINED_LISTS['Loại công việc'], ...dynamicTaskTypes])].sort();
                     } 
-                    // --- KẾT THÚC SỬA ĐỔI ---
-                    
                     else if (field === 'nguoiPhuTrach') currentList = allAssignees;
                     else currentList = PREDEFINED_LISTS[field];
                 }
@@ -1153,7 +1071,6 @@
 
         function closeTaskModal() { document.getElementById('taskModal').classList.add('hidden'); }
         function closeWelcomeModal() {
-            // ... (Nội dung hàm này giữ nguyên)
             const modal = document.getElementById('welcomeModal');
             const modalContent = document.getElementById('welcomeModalContent');
             modalContent.classList.add('scale-95', 'opacity-0');
@@ -1165,97 +1082,199 @@
 
 	// --- HÀM XỬ LÝ EXCEL ---
         function downloadTemplate() { 
-            // ... (Nội dung hàm này giữ nguyên)
-            const displayHeaders = TASK_FIELDS.map(f => f === 'nguoiPhuTrach' ? 'Người phụ trách' : f); const worksheet = XLSX.utils.aoa_to_sheet([displayHeaders]); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, worksheet, 'Tasks'); XLSX.writeFile(workbook, "Mau_Nhap_Cong_Viec.xlsx"); 
+            const displayHeaders = TASK_FIELDS.map(f => f === 'nguoiPhuTrach' ? 'Người phụ trách' : f); 
+            // KHÔNG thêm cột ID vào file mẫu
+            const worksheet = XLSX.utils.aoa_to_sheet([displayHeaders]); 
+            const workbook = XLSX.utils.book_new(); 
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Tasks'); 
+            XLSX.writeFile(workbook, "Mau_Nhap_Cong_Viec_MOI.xlsx"); 
         }
+        
         async function exportToExcel() {
-            // ... (Nội dung hàm này giữ nguyên)
             showNotification("Đang chuẩn bị dữ liệu để xuất file...");
             if (filteredTasks.length === 0) { showNotification("Không có dữ liệu nào để kết xuất.", true); return; }
 
+            // Thêm cột 'ID' vào đầu tiên khi xuất file
             const headers = ['ID', ...TASK_FIELDS.map(h => h === 'nguoiPhuTrach' ? 'Người phụ trách' : h), 'Ngày thay đổi cuối', 'Cảnh Báo'];
-            const dataRows = filteredTasks.map(task => [task.id || '', ...TASK_FIELDS.map(field => task[field] || ''), formatTimestamp(task.lastModified), getWarningStatus(task).label || '']);
+            const dataRows = filteredTasks.map(task => [
+                task.id || '', 
+                ...TASK_FIELDS.map(field => task[field] || ''), 
+                formatTimestamp(task.lastModified), 
+                getWarningStatus(task).label || ''
+            ]);
+            
             const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, 'Danh sách công việc');
             XLSX.writeFile(workbook, `Xuat_Cong_Viec_${new Date().toISOString().slice(0,10)}.xlsx`);
             showNotification("Kết xuất file Excel thành công!");
         }
+        
+        // === BẮT ĐẦU SỬA ĐỔI: Hàm importFromExcel ===
         async function importFromExcel(event) {
-            // ... (Nội dung hàm này giữ nguyên)
             const file = event.target.files[0];
             if (!file) return;
+            
             try {
                 showNotification("Đang đọc file Excel...");
                 const data = await file.arrayBuffer();
                 const workbook = XLSX.read(data);
                 const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-                const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+                
+                // Đọc dữ liệu JSON
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false }); // raw:false để định dạng ngày
+
                 if (jsonData.length === 0) {
                     showNotification("File Excel rỗng hoặc không có dữ liệu.", true);
                     return;
                 }
-                const headers = Object.keys(jsonData[0]);
-                const mandatoryHeaders = ['Loại công việc', 'MST', 'Người phụ trách'];
-                const missingHeaders = mandatoryHeaders.filter(h => !headers.includes(h));
-                if (missingHeaders.length > 0) {
-                    alert(`File Excel của bạn thiếu các cột bắt buộc sau: ${missingHeaders.join(', ')}`);
-                    return;
+
+                // Lấy tiêu đề thực tế từ dòng đầu tiên
+                const actualHeaders = Object.keys(jsonData[0]);
+                
+                // Kiểm tra xem file có cột ID không
+                const hasIdColumn = actualHeaders.includes('ID'); 
+                
+                // Nếu không có cột ID, nó phải tuân theo quy tắc tạo mới
+                const mandatoryCreateHeaders = ['Loại công việc', 'MST', 'Người phụ trách'];
+                if (!hasIdColumn) {
+                    const missingHeaders = mandatoryCreateHeaders.filter(h => !actualHeaders.includes(h));
+                    if (missingHeaders.length > 0) {
+                        alert(`Đây là file TẠO MỚI (không có cột ID). File của bạn thiếu các cột bắt buộc sau: ${missingHeaders.join(', ')}`);
+                        event.target.value = ''; // Reset input
+                        return;
+                    }
                 }
-                showNotification(`Đã tìm thấy ${jsonData.length} công việc. Bắt đầu kiểm tra và nhập...`);
+                
+                showNotification(`Đã tìm thấy ${jsonData.length} dòng. Bắt đầu kiểm tra và ${hasIdColumn ? 'cập nhật/thêm mới' : 'thêm mới'}...`);
+                
                 const batch = writeBatch(db);
                 let successfulImports = 0;
-                let failedRows = [];
-                jsonData.forEach((row, index) => {
-                    const loaiCongViec = row['Loại công việc'];
-                    const mst = row['MST'];
-                    const nguoiPhuTrach = row['Người phụ trách'];
-                    if (!loaiCongViec || !mst || !nguoiPhuTrach) {
-                        failedRows.push(index + 2); 
-                        return; 
-                    }
-                    const newTask = {};
-                    TASK_FIELDS.forEach(field => {
-                        const displayName = (field === 'nguoiPhuTrach' ? 'Người phụ trách' : field);
-                        if (row.hasOwnProperty(displayName)) {
-                            if ((field === 'Ngày giao' || field === 'Hạn xử lý') && typeof row[displayName] === 'number') {
-                                const jsDate = new Date(Math.round((row[displayName] - 25569) * 86400 * 1000));
-                                const day = String(jsDate.getDate()).padStart(2, '0');
-                                const month = String(jsDate.getMonth() + 1).padStart(2, '0');
-                                const year = jsDate.getFullYear();
-                                newTask[field] = `${day}/${month}/${year}`;
-                            } else {
-                                newTask[field] = row[displayName] || '';
-                            }
+                let successfulUpdates = 0;
+                let failedRows = []; // Dòng bị lỗi (ví dụ: ID không tìm thấy)
+                let skippedRows = []; // Dòng bị bỏ qua (ví dụ: thiếu thông tin bắt buộc khi tạo mới)
+
+                // Lặp qua từng dòng dữ liệu trong file Excel
+                for (const [index, row] of jsonData.entries()) {
+                    const taskId = row['ID'] || null;
+
+                    if (taskId) {
+                        // --- LOGIC CẬP NHẬT ---
+                        // 1. Kiểm tra xem ID này có tồn tại trong danh sách allTasks không
+                        const existingTask = allTasks.find(t => t.id === taskId);
+                        
+                        if (existingTask) {
+                            const taskData = {};
+                            // Lặp qua các trường TÁC VỤ (TASK_FIELDS)
+                            TASK_FIELDS.forEach(internalField => {
+                                // Tìm tên hiển thị tương ứng (ví dụ: 'nguoiPhuTrach' -> 'Người phụ trách')
+                                const displayName = (internalField === 'nguoiPhuTrach' ? 'Người phụ trách' : internalField);
+                                
+                                // 2. Chỉ cập nhật nếu cột đó tồn tại trong file Excel (row)
+                                if (row.hasOwnProperty(displayName)) {
+                                    let value = row[displayName];
+                                    
+                                    // Xử lý định dạng ngày (giống logic nhập cũ)
+                                    if ((internalField === 'Ngày giao' || internalField === 'Hạn xử lý') && typeof value === 'number') {
+                                        const jsDate = new Date(Math.round((value - 25569) * 86400 * 1000));
+                                        const day = String(jsDate.getDate()).padStart(2, '0');
+                                        const month = String(jsDate.getMonth() + 1).padStart(2, '0');
+                                        const year = jsDate.getFullYear();
+                                        taskData[internalField] = `${day}/${month}/${year}`;
+                                    } else {
+                                        taskData[internalField] = value || '';
+                                    }
+                                }
+                                // Nếu cột không tồn tại trong Excel, KHÔNG LÀM GÌ CẢ (để giữ nguyên dữ liệu cũ)
+                            });
+
+                            // 3. Cập nhật thông tin sửa đổi
+                            taskData.lastModified = serverTimestamp();
+                            taskData.modifiedBy = auth.currentUser.email;
+
+                            // 4. Thêm vào batch (dùng SET + MERGE)
+                            const docRef = doc(db, "tasks", taskId);
+                            batch.set(docRef, taskData, { merge: true }); // merge: true là quan trọng nhất
+                            successfulUpdates++;
+
                         } else {
-                            newTask[field] = '';
+                            // ID có trong file nhưng không tìm thấy trong DB
+                            failedRows.push({ row: index + 2, reason: `ID "${taskId}" không tìm thấy.` });
                         }
-                    });
-                    newTask.createdBy = auth.currentUser.email;
-                    newTask.modifiedBy = auth.currentUser.email;
-                    newTask.createdAt = serverTimestamp();
-                    newTask.lastModified = serverTimestamp();
-                    const docRef = doc(collection(db, "tasks"));
-                    batch.set(docRef, newTask);
-                    successfulImports++;
-                });
+                    
+                    } else {
+                        // --- LOGIC TẠO MỚI (Giữ nguyên logic cũ) ---
+                        const loaiCongViec = row['Loại công việc'];
+                        const mst = row['MST'];
+                        const nguoiPhuTrach = row['Người phụ trách'];
+
+                        if (!loaiCongViec || !mst || !nguoiPhuTrach) {
+                            skippedRows.push(index + 2); // Bỏ qua do thiếu dữ liệu bắt buộc
+                            continue; // Bỏ qua dòng này, đi đến dòng tiếp theo
+                        }
+                        
+                        const newTask = {};
+                        TASK_FIELDS.forEach(field => {
+                            const displayName = (field === 'nguoiPhuTrach' ? 'Người phụ trách' : field);
+                            if (row.hasOwnProperty(displayName)) {
+                                // Xử lý định dạng ngày (giống logic nhập cũ)
+                                if ((field === 'Ngày giao' || field === 'Hạn xử lý') && typeof row[displayName] === 'number') {
+                                    const jsDate = new Date(Math.round((row[displayName] - 25569) * 86400 * 1000));
+                                    const day = String(jsDate.getDate()).padStart(2, '0');
+                                    const month = String(jsDate.getMonth() + 1).padStart(2, '0');
+                                    const year = jsDate.getFullYear();
+                                    newTask[field] = `${day}/${month}/${year}`;
+                                } else {
+                                    newTask[field] = row[displayName] || '';
+                                }
+                            } else {
+                                newTask[field] = '';
+                            }
+                        });
+
+                        newTask.createdBy = auth.currentUser.email;
+                        newTask.modifiedBy = auth.currentUser.email;
+                        newTask.createdAt = serverTimestamp();
+                        newTask.lastModified = serverTimestamp();
+                        
+                        const docRef = doc(collection(db, "tasks"));
+                        batch.set(docRef, newTask);
+                        successfulImports++;
+                    }
+                } // Hết vòng lặp for
+
+                // --- XỬ LÝ KẾT QUẢ ---
+                let summaryMessages = [];
+                if (successfulUpdates > 0) summaryMessages.push(`Cập nhật thành công ${successfulUpdates} công việc.`);
+                if (successfulImports > 0) summaryMessages.push(`Thêm mới thành công ${successfulImports} công việc.`);
+                
+                if (skippedRows.length > 0) {
+                    alert(`Lưu ý: ${skippedRows.length} dòng TẠO MỚI đã bị bỏ qua do thiếu dữ liệu ở các cột bắt buộc (Loại công việc, MST, Người phụ trách).\nCác dòng bị bỏ qua: ${skippedRows.join(', ')}`);
+                }
                 if (failedRows.length > 0) {
-                    alert(`Lưu ý: ${failedRows.length} dòng đã bị bỏ qua do thiếu dữ liệu ở các cột bắt buộc (Loại công việc, MST, Người phụ trách).\nCác dòng bị lỗi: ${failedRows.join(', ')}`);
+                    // Chỉ hiển thị lỗi đầu tiên để tránh alert quá dài
+                    alert(`Lỗi: ${failedRows.length} dòng CẬP NHẬT đã thất bại.\nChi tiết (lỗi đầu tiên): Dòng ${failedRows[0].row}, Lý do: ${failedRows[0].reason}`);
                 }
-                if (successfulImports > 0) {
+
+                if (successfulImports > 0 || successfulUpdates > 0) {
                     await batch.commit();
-                    await fetchAllData();
-                    showNotification(`Đã nhập thành công ${successfulImports} / ${jsonData.length} công việc!`);
-                } else if (failedRows.length > 0) {
-                     showNotification("Không có công việc hợp lệ nào được nhập. Vui lòng kiểm tra lại file.", true);
+                    await fetchAllData(); // Tải lại dữ liệu
+                    showNotification(summaryMessages.join(' ') || "Hoàn tất xử lý file.");
+                } else if (summaryMessages.length === 0 && skippedRows.length === 0 && failedRows.length === 0) {
+                    showNotification("Không có thay đổi nào được thực hiện.", true);
+                } else {
+                    // Trường hợp chỉ có lỗi hoặc skip
+                    showNotification("Hoàn tất xử lý file. Vui lòng xem thông báo chi tiết (nếu có).", false);
                 }
+            
             } catch (error) {
                 console.error("Lỗi khi nhập từ Excel:", error);
-                showNotification("Có lỗi xảy ra khi nhập file.", true);
+                showNotification("Có lỗi nghiêm trọng xảy ra khi nhập file.", true);
             } finally {
-                event.target.value = '';
+                event.target.value = ''; // Reset input file
             }
         }
+        // === KẾT THÚC SỬA ĐỔI ===
 
         // --- CÁC HÀM MỚI CHO TÍNH NĂNG THÔNG BÁO ---
 
@@ -1331,8 +1350,6 @@
          * @param {string} userName - Tên của user hiện tại
          */
         function setupTaskListener(userId, userName) {
-            // ... (Nội dung hàm này giữ nguyên)
-            // và được gán cho user này
             const q = query(
                 collection(db, "tasks"),
                 where("nguoiPhuTrach", "==", userName),
@@ -1342,7 +1359,6 @@
             taskListenerUnsubscribe = onSnapshot(q, (snapshot) => {
                 let tasksAdded = [];
                 snapshot.docChanges().forEach((change) => {
-                    // Chỉ quan tâm khi có task 'added'
                     if (change.type === "added") {
                         const newTask = { id: change.doc.id, ...change.doc.data() };
                         tasksAdded.push(newTask);
@@ -1350,33 +1366,14 @@
                 });
 
                 if (tasksAdded.length > 0) {
-                    // Thêm các task mới này vào danh sách thông báo
                     newlyAssignedTasks = [...tasksAdded, ...newlyAssignedTasks];
-                    // Cập nhật số trên chuông
                     updateNotificationBell(newlyAssignedTasks.length);
-                    // Hiển thị popup
                     showNotification(`Bạn vừa có ${tasksAdded.length} công việc mới!`, false);
                 }
             }, (error) => {
                 console.error("Lỗi khi lắng nghe công việc mới (đã đăng nhập): ", error);
             });
         }
-
-        // XÓA: Toàn bộ các hàm liên quan đến popup ở màn hình đăng nhập
-        /**
-         * Thiết lập listener real-time KHI Ở MÀN HÌNH ĐĂNG NHẬP
-         */
-        // function setupAuthScreenTaskListener() { ... }
-        
-        /**
-         * Hiển thị popup thông báo ở màn hình đăng nhập
-         */
-        // function showLoginNotificationPopup(message) { ... }
-
-        /**
-         * Ẩn popup thông báo ở màn hình đăng nhập
-         */
-        // function hideLoginNotificationPopup() { ... }
 
         // --- BẮT ĐẦU CHẠY ỨNG DỤNG ---
         setupAuthFormListeners();
