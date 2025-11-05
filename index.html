@@ -1112,6 +1112,8 @@
         }
         
         // --- HÀM MỞ/ĐÓNG MODAL ---
+        
+        // === SỬA ĐỔI: HÀM openTaskModal ===
         function openTaskModal(task = null) {
             const form = document.getElementById('taskForm');
             form.reset();
@@ -1119,35 +1121,48 @@
             formContainer.innerHTML = '';
             
             TASK_FIELDS.forEach(field => {
+                // Xác định giá trị mặc định (cho thành viên mới)
                 const value = task ? task[field] : (field === 'nguoiPhuTrach' && currentUserProfile.role === 'member' ? currentUserProfile.name : '');
                 const div = document.createElement('div');
                 const displayName = field === 'nguoiPhuTrach' ? 'Người phụ trách' : field;
+                // Đặt chiều rộng cho các trường dài
                 if (displayName.includes('Tên NNT') || displayName.includes('Ghi chú')) div.className = 'md:col-span-2';
                 
                 let inputHtml;
                 let currentList;
 
-                if (field === 'nguoiPhuTrach' && (currentUserProfile.role === 'leader' || currentUserProfile.role === 'admin')) {
-                    currentList = allUsersData.filter(u => u.role !== 'pending').map(u => u.name).sort();
-                } else if (field === 'nguoiPhuTrach') {
-                    currentList = [currentUserProfile.name]; 
-                } else {
-                    const allAssignees = allUsersData.filter(u => u.role !== 'pending').map(u => u.name);
-                    
-                    if (field === 'Loại công việc') {
-                        const dynamicTaskTypes = allTasks.map(task => task['Loại công việc']).filter(Boolean);
-                        currentList = [...new Set([...PREDEFINED_LISTS['Loại công việc'], ...dynamicTaskTypes])].sort();
-                    } 
-                    else if (field === 'nguoiPhuTrach') currentList = allAssignees;
-                    else currentList = PREDEFINED_LISTS[field];
+                // --- SỬA ĐỔI LOGIC TẠO DANH SÁCH ---
+                if (field === 'nguoiPhuTrach') {
+                    if (currentUserProfile.role === 'leader' || currentUserProfile.role === 'admin') {
+                        // Lý do: Cần hiển thị TẤT CẢ người dùng (từ allUsersData) VÀ TẤT CẢ những người đã được gán (từ allTasks)
+                        // phòng trường hợp có tên trong task nhưng không (hoặc chưa) có trong user list.
+                        const assigneesFromTasks = [...new Set(allTasks.map(t => t.nguoiPhuTrach).filter(Boolean))];
+                        const assigneesFromUsers = allUsersData.filter(u => u.role !== 'pending').map(u => u.name);
+                        // Kết hợp, loại bỏ trùng lặp và sắp xếp
+                        currentList = [...new Set([...assigneesFromTasks, ...assigneesFromUsers])].sort();
+                    } else {
+                        // Role 'member'
+                        currentList = [currentUserProfile.name];
+                    }
+                } else if (field === 'Loại công việc') {
+                    // Lấy danh sách Loại CV từ cả danh sách cứng và danh sách động trong tasks
+                    const dynamicTaskTypes = allTasks.map(task => task['Loại công việc']).filter(Boolean);
+                    currentList = [...new Set([...PREDEFINED_LISTS['Loại công việc'], ...dynamicTaskTypes])].sort();
+                } else if (PREDEFINED_LISTS[field]) {
+                    // Lấy danh sách từ PREDEFINED_LISTS (ví dụ: Trạng thái)
+                    currentList = PREDEFINED_LISTS[field];
                 }
+                // --- KẾT THÚC SỬA ĐỔI LOGIC ---
 
 		        if (field === 'nguoiPhuTrach' && currentUserProfile.role === 'member') {
+                    // Nếu là member, hiển thị tên của họ và không cho sửa
                     inputHtml = `<input type="text" id="field-${field}" value="${value || ''}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2 bg-slate-100" readonly>`;
                 } else if (currentList) {
+                    // Nếu có danh sách (currentList), tạo dropdown (select)
                     const options = currentList.map(opt => `<option value="${opt}" ${opt === value ? 'selected' : ''}>${opt}</option>`).join('');
                     inputHtml = `<select id="field-${field}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2"><option value="">-- Chọn --</option>${options}</select>`;
                 } else {
+                    // Nếu không, tạo ô nhập liệu (input text)
                     const isDate = displayName.includes('Ngày') || displayName.includes('Hạn');
                     inputHtml = `<input type="text" id="field-${field}" value="${value || ''}" class="mt-1 block w-full border border-slate-300 rounded-md shadow-sm p-2" ${isDate ? 'placeholder="dd/mm/yyyy"' : ''}>`;
                 }
@@ -1160,12 +1175,13 @@
             document.getElementById('taskId').value = task ? task.id : '';
             const deleteButton = document.getElementById('deleteTaskButton');
             
+            // Chỉ hiển thị nút xóa cho admin/leader khi chỉnh sửa
             deleteButton.style.display = task && (currentUserProfile.role === 'leader' || currentUserProfile.role === 'admin') ? 'block' : 'none';
             
             deleteButton.onclick = deleteTask;
             document.getElementById('taskModal').classList.remove('hidden');
         }
-
+        // === KẾT THÚC SỬA ĐỔI: HÀM openTaskModal ===
 
 
         function closeTaskModal() { document.getElementById('taskModal').classList.add('hidden'); }
@@ -1547,5 +1563,3 @@
     </script>
 </body>
 </html>
-
-
